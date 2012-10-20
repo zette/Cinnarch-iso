@@ -1,0 +1,20 @@
+LABEL arch
+TEXT HELP
+Boot the Cinnarch live medium. It allows you to install Cinnarch or
+perform system maintenance.
+ENDTEXT
+MENU LABEL Boot Cinnarch
+LINUX boot/%ARCH%/vmlinuz
+INITRD boot/%ARCH%/archiso.img
+APPEND archisobasedir=%INSTALL_DIR% archisolabel=%ARCHISO_LABEL% quiet
+
+LABEL arch2
+TEXT HELP
+Boot the Cinnarch live medium. It allows you to install Cinnarch or
+perform system maintenance.
+ENDTEXT
+MENU LABEL Boot Cinnarch(nvidia)
+LINUX boot/%ARCH%/vmlinuz
+INITRD boot/%ARCH%/archiso.img
+APPEND archisobasedir=%INSTALL_DIR% archisolabel=%ARCHISO_LABEL% nouveau.modeset=0
+

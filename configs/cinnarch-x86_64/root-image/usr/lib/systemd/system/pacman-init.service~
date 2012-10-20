@@ -1,0 +1,10 @@
+[Unit]
+Description=Pacman-init
+After=haveged.service
+
+[Service]
+ExecStart=/etc/rc.d/pacman-init
+StandardOutput=syslog
+
+[Install]
+WantedBy=haveged.service
