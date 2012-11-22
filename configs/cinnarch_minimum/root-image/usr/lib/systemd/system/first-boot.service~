@@ -1,0 +1,10 @@
+[Unit]
+Description=Populate pacman keyring
+After=pacman-init.service
+
+[Service]
+ExecStart=/usr/bin/populate
+StandardOutput=syslog
+
+[Install]
+WantedBy=haveged.service

@@ -12,4 +12,4 @@ squashfs-tools
 ## Instructions ##
 
  - sudo make install
- - copy the config of your choice from /usr/share/cinnarch-iso (cinnarch-x86_64, cinnarch-i686 ...)
+ - copy the config of your choice from /usr/share/cinnarch-iso (cinnarch, cinnarch_minimum)

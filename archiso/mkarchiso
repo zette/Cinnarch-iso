@@ -74,7 +74,7 @@ _chroot_umount () {
 _chroot_init() {
     if [[ ! -d ${work_dir}/root-image/var/cache/pacman ]]; then
         mkdir -p ${work_dir}/root-image/{dev,proc,run,sys,tmp,var/lib/pacman}
-        _pacman "bash bzip2 cinnarch-keyring coreutils cronie cryptsetup device-mapper dhcpcd diffutils e2fsprogs file filesystem findutils gawk gcc-libs gettext glibc grep gzip heirloom-mailx inetutils iputils jfsutils less licenses linux logrotate lvm2 mdadm nano pacman pciutils pcmciautils perl ppp procps-ng psmisc reiserfsprogs sed shadow sysfsutils syslog-ng systemd systemd-sysvcompat tar texinfo usbutils util-linux vi wget which wpa_supplicant xfsprogs"
+        _pacman "bash bzip2 cinnarch-keyring cinnarch-mirrorlist coreutils cronie cryptsetup device-mapper dhcpcd diffutils e2fsprogs file filesystem findutils gawk gcc-libs gettext glibc grep gzip heirloom-mailx inetutils iputils jfsutils less licenses linux logrotate lvm2 mdadm nano pacman pciutils pcmciautils perl ppp procps-ng psmisc reiserfsprogs sed shadow sysfsutils syslog-ng systemd systemd-sysvcompat tar texinfo usbutils util-linux vi wget which wpa_supplicant xfsprogs"
         _pacman "syslinux"
     fi
 }

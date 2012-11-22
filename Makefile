@@ -32,4 +32,4 @@ dist:
 	git archive --format=tar --prefix=cinnarch-iso-$(V)/ v$(V) | gzip -9 > cinnarch-iso-$(V).tar.gz
 	gpg --detach-sign --use-agent cinnarch-iso-$(V).tar.gz
 
-.PHONY: install install-program install-initcpio install-examples install-doc dist
+.PHONY: install install-program install-initcpio install-examples dist
