@@ -1,0 +1,15 @@
+#!/bin/bash
+
+for arch in i686 x86_64; do 
+    for type in cinnarch cinnarch_minimum; do
+    	echo
+    	echo "### Generating $type-2012.12.21-netinstall-$arch.torrent ..."
+    	echo
+    	mktorrent -a udp://tracker.openbittorrent.com:80 -n "$type-2012.12.21-$arch.iso" -o $type-2012.12.21-$arch.torrent -w http://repo.cinnarch.com/iso/2012.12.21/$type-2012.12.21-$arch.iso $type-2012.12.21-$arch.iso
+    done
+done
+
+
+echo
+echo
+echo "DONE!"

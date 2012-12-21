@@ -45,7 +45,7 @@ class main():
 			langs += language.split(":")
 		"""Now add on to the back of the list the translations that we
 		know that we have, our defaults"""
-		langs += ["es_ES", "en_US"]
+		langs += ["en_US"]
 
 		"""Now langs is a list of all of the languages that we are going
 		to try to use.  First we check the default, then what the system

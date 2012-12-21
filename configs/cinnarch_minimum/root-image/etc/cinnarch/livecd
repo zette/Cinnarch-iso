@@ -3,6 +3,8 @@
 
 source /etc/cinnarch/functions
 
+NETWORK_ALIVE=`ping -c1 google.com 2>&1 | grep unknown`
+
 CINNARCHVAR="$(kernel_cmdline cinnarchvar lang:en_US,keymap:en_US)"
 LOCALE="$(echo "$CINNARCHVAR" | cut -d, -f1 | cut -d: -f2)"
 KEYMAP="$(echo "$CINNARCHVAR" | cut -d, -f2 | cut -d: -f2)"
@@ -22,9 +24,16 @@ if [ "$LOCALE" != "en_US.UTF-8" ]; then
 fi
 /usr/sbin/locale-gen > /dev/null
 
+# Install chinese fonts
+if [ "$LOCALE" = 'zh_TW' ] || [ "$LOCALE" = 'zh_CN' ];then
+	pacman --noconfirm -U /arch/pkg/opendesktop-fonts-1.4.2-1-any.pkg.tar.xz
+fi
+
 
 # update_pacman_databases
-pacman -Syy &> /dev/null
+if [[ "$NETWORK_ALIVE" = "" ]];then
+	pacman -Syy &> /dev/null
+fi
 
 
 # do_lang_settings
@@ -35,5 +44,3 @@ _do_locales
 # load keys
 loadkeys $(cat /etc/vconsole.conf | grep "KEYMAP=" | cut -d= -f2)
 
-echo ${LOCALE} > /home/cinnarch/.config/user-dirs.locale
-su -c "xdg-user-dirs-update" cinnarch

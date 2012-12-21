@@ -1,11 +1,13 @@
 #!/bin/bash
-INSTALLER_VERSION=0.5
+INSTALLER_VERSION=0.6
+
+TEXTDOMAIN=cli_installer
 # we rely on some output which is parsed in english!
-unset LANG
+#unset LANG
 source /etc/cinnarch/functions
 
 ANSWER="/tmp/.setup"
-TITLE="Cinnarch Installation - v$INSTALLER_VERSION"
+TITLE=$"Cinnarch Installation - v$INSTALLER_VERSION"
 # use the first VT not dedicated to a running console
 LOG="/dev/tty7"
 # where the Archboot media (ISO/CD/USB) should be mounted
@@ -34,7 +36,7 @@ FILE_URL="file:///packages/core-$(uname -m)/pkg"
 MIRRORLIST="/etc/pacman.d/mirrorlist"
 PACKAGES=""
 
-dialog --backtitle "${TITLE}" --aspect 15 --infobox "Checking your connection..." 4 35
+dialog --backtitle "${TITLE}" --aspect 15 --infobox $"Checking your connection..." 4 35
 NETWORK_ALIVE=`ping -c1 google.com 2>&1 | grep unknown`
 
 # destination of blockdevices in /sys
@@ -43,6 +45,11 @@ block="/sys/block"
 # partitions
 PART_ROOT=""
 ROOTFS=""
+
+# Localization parameters
+CINNARCHVAR="$(kernel_cmdline cinnarchvar lang:en_US,keymap:en_US)"
+KEYMAP="$(echo "$CINNARCHVAR" | cut -d, -f2 | cut -d: -f2)"
+LOCALE="$(echo "$CINNARCHVAR" | cut -d, -f1 | cut -d: -f2)"
 
 # Mylex DAC960 PCI RAID controller, Compaq Next Generation Drive Array, 
 # Compaq Intelligent Drive Array
@@ -121,12 +128,14 @@ pkgdesc () {
 #
 chroot_mount()
 {
-    [[ -e "${DESTDIR}/sys" ]] || mkdir "${DESTDIR}/sys"
-    [[ -e "${DESTDIR}/proc" ]] || mkdir "${DESTDIR}/proc"
+    [[ -e "${DESTDIR}/sys" ]] || mkdir -m 555 "${DESTDIR}/sys"
+    [[ -e "${DESTDIR}/proc" ]] || mkdir -m 555 "${DESTDIR}/proc"
     [[ -e "${DESTDIR}/dev" ]] || mkdir "${DESTDIR}/dev"
     mount -t sysfs sysfs "${DESTDIR}/sys"
     mount -t proc proc "${DESTDIR}/proc"
     mount -o bind /dev "${DESTDIR}/dev"
+    chmod 555 "${DESTDIR}/sys"
+    chmod 555 "${DESTDIR}/proc"
 }
 
 # chroot_umount()
@@ -187,7 +196,7 @@ net_interfaces() {
 activate_dmraid()
 {
     if [[ -e /sbin/dmraid ]]; then
-        DIALOG --infobox "Activating dmraid arrays..." 0 0
+        DIALOG --infobox $"Activating dmraid arrays..." 0 0
         /sbin/dmraid -ay -I -Z >/dev/null 2>&1
     fi
 }
@@ -200,9 +209,9 @@ activate_lvm2()
     if [[ -e /sbin/lvm ]]; then
         OLD_LVM2_GROUPS=${LVM2_GROUPS}
         OLD_LVM2_VOLUMES=${LVM2_VOLUMES}
-        DIALOG --infobox "Scanning logical volumes..." 0 0
+        DIALOG --infobox $"Scanning logical volumes..." 0 0
         /sbin/lvm vgscan --ignorelockingfailure >/dev/null 2>&1
-        DIALOG --infobox "Activating logical volumes..." 0 0
+        DIALOG --infobox $"Activating logical volumes..." 0 0
         /sbin/lvm vgchange --ignorelockingfailure --ignoremonitoring -ay >/dev/null 2>&1
         LVM2_GROUPS="$(vgs -o vg_name --noheading 2>/dev/null)"
         LVM2_VOLUMES="$(lvs -o vg_name,lv_name --noheading --separator - 2>/dev/null)"
@@ -216,7 +225,7 @@ activate_raid()
 {
     ACTIVATE_RAID=""
     if [[ -e /sbin/mdadm ]]; then
-        DIALOG --infobox "Activating RAID arrays..." 0 0
+        DIALOG --infobox $"Activating RAID arrays..." 0 0
         /sbin/mdadm --assemble --scan >/dev/null 2>&1 || ACTIVATE_RAID="no"
     fi
 }
@@ -227,7 +236,7 @@ activate_luks()
 {
     ACTIVATE_LUKS=""
     if [[ -e /usr/sbin/cryptsetup ]]; then
-        DIALOG --infobox "Scanning for luks encrypted devices..." 0 0
+        DIALOG --infobox $"Scanning for luks encrypted devices..." 0 0
         if [[ "$(${_BLKID} | grep "TYPE=\"crypto_LUKS\"")" ]]; then
             for PART in $(${_BLKID} | grep "TYPE=\"crypto_LUKS\"" | sed -e 's#:.*##g'); do
                 # skip already encrypted devices, device mapper!
@@ -237,7 +246,7 @@ activate_luks()
                 done
                 if ! [[ "${OPEN_LUKS}" = "no" ]]; then
                     RUN_LUKS=""
-                    DIALOG --yesno "Setup detected luks encrypted device, do you want to activate ${PART} ?" 0 0 && RUN_LUKS="1"
+                    DIALOG --yesno $"Setup detected luks encrypted device, do you want to activate ${PART} ?" 0 0 && RUN_LUKS="1"
                     [[ "${RUN_LUKS}" = "1" ]] && _enter_luks_name && _enter_luks_passphrase && _opening_luks
                     [[ "${RUN_LUKS}" = "" ]] && ACTIVATE_LUKS="no"
                 else
@@ -763,7 +772,7 @@ getdest() {
 #
 geteditor() {
     if ! [[ "${EDITOR}" ]]; then
-        DIALOG --menu "Select a Text Editor to Use" 10 35 3 \
+        DIALOG --menu $"Select a Text Editor to Use" 10 35 3 \
         "1" "nano (easier)" \
         "2" "vi" 2>${ANSWER} || return 1
         case $(cat ${ANSWER}) in
@@ -777,7 +786,7 @@ geteditor() {
 set_device_name_scheme() {
     NAME_SCHEME_PARAMETER=""
     NAME_SCHEME_LEVELS="FSUUID /dev/disk/by-uuid/<uuid> FSLABEL /dev/disk/by-label/<label> KERNEL /dev/<kernelname>"
-    DIALOG --menu "Select the device name scheme you want to use in config files (recommended is UUID)." 11 50 5 ${NAME_SCHEME_LEVELS} 2>${ANSWER} || return 1
+    DIALOG --menu $"Select the device name scheme you want to use in config files (recommended is UUID)." 11 50 5 ${NAME_SCHEME_LEVELS} 2>${ANSWER} || return 1
     NAME_SCHEME_PARAMETER=$(cat ${ANSWER})
     NAME_SCHEME_PARAMETER_RUN="1"
 }
@@ -787,7 +796,7 @@ set_guid() {
     ## Lenono BIOS-GPT issues - Arch Forum - https://bbs.archlinux.org/viewtopic.php?id=131149 , https://bbs.archlinux.org/viewtopic.php?id=133330 , https://bbs.archlinux.org/viewtopic.php?id=138958
     ## Lenono BIOS-GPT issues - in Fedora - https://bugzilla.redhat.com/show_bug.cgi?id=735733, https://bugzilla.redhat.com/show_bug.cgi?id=749325 , http://git.fedorahosted.org/git/?p=anaconda.git;a=commit;h=ae74cebff312327ce2d9b5ac3be5dbe22e791f09
     GUIDPARAMETER=""
-    DIALOG --defaultno --yesno "Do you want to use GUID Partition Table (GPT)?\n\nIt is a standard for the layout of the partition table on a physical hard disk. Although it forms a part of the Unified Extensible Firmware Interface (UEFI) standard (replacement for the PC BIOS firmware), it is also used on some BIOS systems because of the limitations of MBR aka msdos partition tables, which restrict maximum disk size to 2 TiB.\n\nWindows XP and earlier Windows systems cannot (without hacks) read or write to drives formatted with a GUID partition table, however, Vista and Windows 7 and later versions include the capability to use GPT for non-boot aka data disks (only UEFI systems can boot Windows from GPT disks).\n\nAttention:\n- Please check if your other operating systems have GPT support!\n- Use this option for a GRUB(2) setup, which should support LVM, RAID etc.,\n  which doesn't fit into the usual 30k MS-DOS post-MBR gap.\n- BIOS-GPT boot may not work in some Lenovo systems (irrespective of the\n 
+    DIALOG --defaultno --yesno $"Do you want to use GUID Partition Table (GPT)?\n\nIt is a standard for the layout of the partition table on a physical hard disk. Although it forms a part of the Unified Extensible Firmware Interface (UEFI) standard (replacement for the PC BIOS firmware), it is also used on some BIOS systems because of the limitations of MBR aka msdos partition tables, which restrict maximum disk size to 2 TiB.\n\nWindows XP and earlier Windows systems cannot (without hacks) read or write to drives formatted with a GUID partition table, however, Vista and Windows 7 and later versions include the capability to use GPT for non-boot aka data disks (only UEFI systems can boot Windows from GPT disks).\n\nAttention:\n- Please check if your other operating systems have GPT support!\n- Use this option for a GRUB(2) setup, which should support LVM, RAID etc.,\n  which doesn't fit into the usual 30k MS-DOS post-MBR gap.\n- BIOS-GPT boot may not work in some Lenovo systems (irrespective of the\n 
   bootloader used). " 0 0 && GUIDPARAMETER="yes"
 }
 
@@ -858,7 +867,7 @@ _getavailpartitions()
 # the destination root partition last!
 _umountall()
 {
-    DIALOG --infobox "Disabling swapspace, unmounting already mounted disk devices..." 0 0
+    DIALOG --infobox $"Disabling swapspace, unmounting already mounted disk devices..." 0 0
     swapoff -a >/dev/null 2>&1
     umount $(mount | grep -v "${DESTDIR} " | grep "${DESTDIR}" | sed 's|\ .*||g') >/dev/null 2>&1
     umount $(mount | grep "${DESTDIR} " | sed 's|\ .*||g') >/dev/null 2>&1
@@ -869,13 +878,13 @@ _stopmd()
 {
     if [[ "$(cat /proc/mdstat 2>/dev/null | grep ^md)" ]]; then
         DISABLEMD=""
-        DIALOG --defaultno --yesno "Setup detected already running raid devices, do you want to disable them completely?" 0 0 && DISABLEMD="1"
+        DIALOG --defaultno --yesno $"Setup detected already running raid devices, do you want to disable them completely?" 0 0 && DISABLEMD="1"
         if [[ "${DISABLEMD}" = "1" ]]; then
-            DIALOG --infobox "Disabling all software raid devices..." 0 0
+            DIALOG --infobox $"Disabling all software raid devices..." 0 0
             for i in $(cat /proc/mdstat 2>/dev/null | grep ^md | sed -e 's# :.*##g'); do
                 mdadm --manage --stop /dev/${i} > ${LOG}
             done
-            DIALOG --infobox "Cleaning superblocks of all software raid devices..." 0 0
+            DIALOG --infobox $"Cleaning superblocks of all software raid devices..." 0 0
             for i in $(${_BLKID} | grep "TYPE=\"linux_raid_member\"" | sed -e 's#:.*##g'); do
                 mdadm --zero-superblock ${i} > ${LOG}
             done
@@ -883,9 +892,9 @@ _stopmd()
     fi
     DISABLEMDSB=""
     if [[ "$(${_BLKID} | grep "TYPE=\"linux_raid_member\"")" ]]; then
-        DIALOG --defaultno --yesno "Setup detected superblock of raid devices, do you want to clean the superblock of them?" 0 0 && DISABLEMDSB="1"
+        DIALOG --defaultno --yesno $"Setup detected superblock of raid devices, do you want to clean the superblock of them?" 0 0 && DISABLEMDSB="1"
         if [[ "${DISABLEMDSB}" = "1" ]]; then
-            DIALOG --infobox "Cleaning superblocks of all software raid devices..." 0 0
+            DIALOG --infobox $"Cleaning superblocks of all software raid devices..." 0 0
             for i in $(${_BLKID} | grep "TYPE=\"linux_raid_member\"" | sed -e 's#:.*##g'); do
                 mdadm --zero-superblock ${i} > ${LOG}
             done
@@ -905,18 +914,18 @@ _stoplvm()
     ! [[ "${LV_GROUPS}" = "" ]] && DETECTED_LVM=1
     ! [[ "${LV_PHYSICAL}" = "" ]] && DETECTED_LVM=1
     if [[ "${DETECTED_LVM}" = "1" ]]; then
-        DIALOG --defaultno --yesno "Setup detected lvm volumes, volume groups or physical devices, do you want to remove them completely?" 0 0 && DISABLELVM="1"
+        DIALOG --defaultno --yesno $"Setup detected lvm volumes, volume groups or physical devices, do you want to remove them completely?" 0 0 && DISABLELVM="1"
     fi
     if [[ "${DISABLELVM}" = "1" ]]; then
-        DIALOG --infobox "Removing logical volumes ..." 0 0
+        DIALOG --infobox $"Removing logical volumes ..." 0 0
         for i in ${LV_VOLUMES}; do
             lvremove -f /dev/mapper/${i} 2>/dev/null> ${LOG}
         done
-        DIALOG --infobox "Removing logical groups ..." 0 0
+        DIALOG --infobox $"Removing logical groups ..." 0 0
         for i in ${LV_GROUPS}; do
             vgremove -f ${i} 2>/dev/null > ${LOG}
         done
-        DIALOG --infobox "Removing physical volumes ..." 0 0
+        DIALOG --infobox $"Removing physical volumes ..." 0 0
         for i in ${LV_PHYSICAL}; do
             pvremove -f ${i} 2>/dev/null > ${LOG}
         done
@@ -937,10 +946,10 @@ _stopluks()
     done
     ! [[ "${LUKSDEVICE}" = "" ]] && DETECTED_LUKS=1
     if [[ "${DETECTED_LUKS}" = "1" ]]; then
-        DIALOG --defaultno --yesno "Setup detected running luks encrypted devices, do you want to remove them completely?" 0 0 && DISABLELUKS="1"
+        DIALOG --defaultno --yesno $"Setup detected running luks encrypted devices, do you want to remove them completely?" 0 0 && DISABLELUKS="1"
     fi
     if [[ "${DISABLELUKS}" = "1" ]]; then
-        DIALOG --infobox "Removing luks encrypted devices ..." 0 0
+        DIALOG --infobox $"Removing luks encrypted devices ..." 0 0
         for i in ${LUKSDEVICE}; do
             LUKS_REAL_DEVICE="$(echo $(cryptsetup status ${i} | grep device: | sed -e 's#device:##g'))"
             cryptsetup remove ${i} > ${LOG}
@@ -955,10 +964,10 @@ _stopluks()
     # detect not running luks devices
     [[ "$(${_BLKID} | grep "TYPE=\"crypto_LUKS\"")" ]] && DETECTED_LUKS=1
     if [[ "${DETECTED_LUKS}" = "1" ]]; then
-        DIALOG --defaultno --yesno "Setup detected not running luks encrypted devices, do you want to remove them completely?" 0 0 && DISABLELUKS="1"
+        DIALOG --defaultno --yesno $"Setup detected not running luks encrypted devices, do you want to remove them completely?" 0 0 && DISABLELUKS="1"
     fi
     if [[ "${DISABLELUKS}" = "1" ]]; then
-        DIALOG --infobox "Removing not running luks encrypted devices ..." 0 0
+        DIALOG --infobox $"Removing not running luks encrypted devices ..." 0 0
         for i in $(${_BLKID} | grep "TYPE=\"crypto_LUKS\"" | sed -e 's#:.*##g'); do
             # delete header from device
             dd if=/dev/zero of=${i} bs=512 count=2048 >/dev/null 2>&1
@@ -970,26 +979,26 @@ _stopluks()
 #_dmraid_update
 _dmraid_update()
 {
-    DIALOG --infobox "Deactivating dmraid devices ..." 0 0
+    DIALOG --infobox $"Deactivating dmraid devices ..." 0 0
     dmraid -an >/dev/null 2>&1
     if [[ "${DETECTED_LVM}" = "1" || "${DETECTED_LUKS}" = "1" ]]; then
-        DIALOG --defaultno --yesno "Setup detected running dmraid devices and/or running lvm2, luks encrypted devices. If you reduced/deleted partitions on your dmraid device a complete reset of devicemapper devices is needed. This will reset also your created lvm2 or encrypted devices. Are you sure you want to do this?" 0 0 && RESETDM="1"
+        DIALOG --defaultno --yesno $"Setup detected running dmraid devices and/or running lvm2, luks encrypted devices. If you reduced/deleted partitions on your dmraid device a complete reset of devicemapper devices is needed. This will reset also your created lvm2 or encrypted devices. Are you sure you want to do this?" 0 0 && RESETDM="1"
         if [[ "${RESETDM}" = "1" ]]; then
-            DIALOG --infobox "Resetting devicemapper devices ..." 0 0
+            DIALOG --infobox $"Resetting devicemapper devices ..." 0 0
             dmsetup remove_all >/dev/null 2>&1
         fi
     else
-        DIALOG --infobox "Resetting devicemapper devices ..." 0 0
+        DIALOG --infobox $"Resetting devicemapper devices ..." 0 0
         dmsetup remove_all >/dev/null 2>&1
     fi
-    DIALOG --infobox "Reactivating dmraid devices ..." 0 0
+    DIALOG --infobox $"Reactivating dmraid devices ..." 0 0
     dmraid -ay -Z >/dev/null 2>&1
 }
 
 #helpbox for raid
 _helpraid()
 {
-DIALOG --msgbox "LINUX SOFTWARE RAID SUMMARY:\n
+DIALOG --msgbox $"LINUX SOFTWARE RAID SUMMARY:\n
 -----------------------------\n\n
 Linear mode:\n
 You have two or more partitions which are not necessarily the same size\n
@@ -1097,39 +1106,39 @@ _raid()
         done
         # break if all devices are in use
         if [[ "${PARTS}" = "" ]]; then
-            DIALOG --msgbox "All devices in use. No more devices left for new creation." 0 0
+            DIALOG --msgbox $"All devices in use. No more devices left for new creation." 0 0
             return 1
         fi
         # enter raid device name
         RAIDDEVICE=""
         while [[ "${RAIDDEVICE}" = "" ]]; do
             if [[ "${RAID_PARTITION}" = "" ]]; then
-                DIALOG --inputbox "Enter the node name for the raiddevice:\n/dev/md[number]\n/dev/md0\n/dev/md1\n\n" 15 65 "/dev/md0" 2>${ANSWER} || return 1
+                DIALOG --inputbox $"Enter the node name for the raiddevice:\n/dev/md[number]\n/dev/md0\n/dev/md1\n\n" 15 65 "/dev/md0" 2>${ANSWER} || return 1
             fi
             if [[ "${RAID_PARTITION}" = "1" ]]; then
-                DIALOG --inputbox "Enter the node name for partitionable raiddevice:\n/dev/md_d[number]\n/dev/md_d0\n/dev/md_d1" 15 65 "/dev/md_d0" 2>${ANSWER} || return 1
+                DIALOG --inputbox $"Enter the node name for partitionable raiddevice:\n/dev/md_d[number]\n/dev/md_d0\n/dev/md_d1" 15 65 "/dev/md_d0" 2>${ANSWER} || return 1
             fi
             RAIDDEVICE=$(cat ${ANSWER})
             if [[ "$(cat /proc/mdstat 2>/dev/null | grep "^$(echo ${RAIDDEVICE} | sed -e 's#/dev/##g')")" ]]; then
-                DIALOG --msgbox "ERROR: You have defined 2 identical node names! Please enter another name." 8 65
+                DIALOG --msgbox $"ERROR: You have defined 2 identical node names! Please enter another name." 8 65
                 RAIDDEVICE=""
             fi
         done
         RAIDLEVELS="linear - raid0 - raid1 - raid4 - raid5 - raid6 - raid10 -"
-        DIALOG --menu "Select the raid level you want to use" 21 50 11 ${RAIDLEVELS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select the raid level you want to use" 21 50 11 ${RAIDLEVELS} 2>${ANSWER} || return 1
         LEVEL=$(cat ${ANSWER})
         # raid5 and raid10 support parity parameter
         PARITY=""
         if [[ "${LEVEL}" = "raid5" || "${LEVEL}" = "raid6" || "${LEVEL}" = "raid10" ]]; then
             PARITYLEVELS="left-asymmetric - left-symmetric - right-asymmetric - right-symmetric -"
-            DIALOG --menu "Select the parity layout you want to use (default is left-symmetric)" 21 50 13 ${PARITYLEVELS} 2>${ANSWER} || return 1
+            DIALOG --menu $"Select the parity layout you want to use (default is left-symmetric)" 21 50 13 ${PARITYLEVELS} 2>${ANSWER} || return 1
             PARTIY=$(cat ${ANSWER})
         fi
         # show all devices with sizes
-        DIALOG --msgbox "DISKS:\n$(_getavaildisks)\n\nPARTITIONS:\n$(_getavailpartitions)" 0 0
+        DIALOG --msgbox $"DISKS:\n$(_getavaildisks)\n\nPARTITIONS:\n$(_getavailpartitions)" 0 0
         # select the first device to use, no missing option available!
         RAIDNUMBER=1
-        DIALOG --menu "Select device ${RAIDNUMBER}" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select device ${RAIDNUMBER}" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
         PART=$(cat ${ANSWER})
         echo "${PART}" >>/tmp/.raid
         while [[ "${PART}" != "DONE" ]]; do
@@ -1139,13 +1148,13 @@ _raid()
             # raid0 doesn't support missing devices
             ! [[ "${LEVEL}" = "raid0" || "${LEVEL}" = "linear" ]] && MDEXTRA="MISSING _"
             # add more devices
-            DIALOG --menu "Select additional device ${RAIDNUMBER}" 21 50 13 ${PARTS} ${MDEXTRA} DONE _ 2>${ANSWER} || return 1
+            DIALOG --menu $"Select additional device ${RAIDNUMBER}" 21 50 13 ${PARTS} ${MDEXTRA} DONE _ 2>${ANSWER} || return 1
             PART=$(cat ${ANSWER})
             SPARE=""
-            ! [[ "${LEVEL}" = "raid0" || "${LEVEL}" = "linear" ]] && DIALOG --yesno --defaultno "Would you like to use ${PART} as spare device?" 0 0 && SPARE="1"
+            ! [[ "${LEVEL}" = "raid0" || "${LEVEL}" = "linear" ]] && DIALOG --yesno --defaultno $"Would you like to use ${PART} as spare device?" 0 0 && SPARE="1"
             [[ "${PART}" = "DONE" ]] && break
             if [[ "${PART}" = "MISSING" ]]; then
-                DIALOG --yesno "Would you like to create a degraded raid on ${RAIDDEVICE}?" 0 0 && DEGRADED="missing"
+                DIALOG --yesno $"Would you like to create a degraded raid on ${RAIDDEVICE}?" 0 0 && DEGRADED="missing"
                 echo "${DEGRADED}" >>/tmp/.raid
             else
                 if [[ "${SPARE}" = "1" ]]; then
@@ -1156,7 +1165,7 @@ _raid()
             fi
         done
         # final step ask if everything is ok?
-        DIALOG --yesno "Would you like to create ${RAIDDEVICE} like this?\n\nLEVEL:\n${LEVEL}\n\nDEVICES:\n$(for i in $(cat /tmp/.raid); do echo "${i}\n";done)\nSPARES:\n$(for i in $(cat /tmp/.raid-spare); do echo "${i}\n";done)" 0 0 && MDFINISH="DONE"
+        DIALOG --yesno $"Would you like to create ${RAIDDEVICE} like this?\n\nLEVEL:\n${LEVEL}\n\nDEVICES:\n$(for i in $(cat /tmp/.raid); do echo "${i}\n";done)\nSPARES:\n$(for i in $(cat /tmp/.raid-spare); do echo "${i}\n";done)" 0 0 && MDFINISH="DONE"
     done
     _createraid
 }
@@ -1177,17 +1186,17 @@ _createraid()
     ! [[ "${RAID_DEVICES}" = "0" ]] && RAIDOPTIONS="${RAIDOPTIONS} --raid-devices=${RAID_DEVICES}"
     ! [[ "${SPARE_DEVICES}" = "0" ]] && RAIDOPTIONS="${RAIDOPTIONS} --spare-devices=${SPARE_DEVICES}"
     ! [[ "${PARITY}" = "" ]] && RAIDOPTIONS="${RAIDOPTIONS} --layout=${PARITY}"
-    DIALOG --infobox "Creating ${RAIDDEVICE}..." 0 0
+    DIALOG --infobox $"Creating ${RAIDDEVICE}..." 0 0
     mdadm --create ${RAIDDEVICE} ${RAIDOPTIONS} ${DEVICES} >${LOG} 2>&1
     if [[ $? -gt 0 ]]; then
-        DIALOG --msgbox "Error creating ${RAIDDEVICE} (see ${LOG} for details)." 0 0
+        DIALOG --msgbox $"Error creating ${RAIDDEVICE} (see ${LOG} for details)." 0 0
         return 1
     fi
     if [[ "$(echo ${RAIDDEVICE} | grep /md_d[0-9])" ]]; then
         # switch for mbr usage
         set_guid
         if [[ "${GUIDPARAMETER}" = "" ]]; then
-            DIALOG --msgbox "Now you'll be put into the parted program where you can partition your raiddevice to your needs." 18 70
+            DIALOG --msgbox $"Now you'll be put into the parted program where you can partition your raiddevice to your needs." 18 70
             clear
             parted ${RAIDDEVICE} print
             parted ${RAIDDEVICE}
@@ -1204,7 +1213,7 @@ _createraid()
 # help for lvm
 _helplvm()
 {
-DIALOG --msgbox "LOGICAL VOLUME SUMMARY:\n
+DIALOG --msgbox $"LOGICAL VOLUME SUMMARY:\n
 -----------------------------\n\n
 LVM is a Logical Volume Manager for the Linux kernel. With LVM you can\n
 abstract your storage space and have \"virtual partitions\" which are easier\n
@@ -1275,14 +1284,14 @@ _createpv()
         done
         # break if all devices are in use
         if [[ "${PARTS}" = "" ]]; then
-            DIALOG --msgbox "No devices left for physical volume creation." 0 0
+            DIALOG --msgbox $"No devices left for physical volume creation." 0 0
             return 1
         fi
         # show all devices with sizes
-        DIALOG --msgbox "DISKS:\n$(_getavaildisks)\n\nPARTITIONS:\n$(_getavailpartitions)\n\n" 0 0
+        DIALOG --msgbox $"DISKS:\n$(_getavaildisks)\n\nPARTITIONS:\n$(_getavailpartitions)\n\n" 0 0
         # select the first device to use
         DEVNUMBER=1
-        DIALOG --menu "Select device number ${DEVNUMBER} for physical volume" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select device number ${DEVNUMBER} for physical volume" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
         PART=$(cat ${ANSWER})
         echo "${PART}" >>/tmp/.pvs-create
         while [[ "${PART}" != "DONE" ]]; do
@@ -1290,19 +1299,19 @@ _createpv()
             # clean loop from used partition and options
             PARTS="$(echo ${PARTS} | sed -e "s#${PART}\ _##g")"
             # add more devices
-            DIALOG --menu "Select additional device number ${DEVNUMBER} for physical volume" 21 50 13 ${PARTS} DONE _ 2>${ANSWER} || return 1
+            DIALOG --menu $"Select additional device number ${DEVNUMBER} for physical volume" 21 50 13 ${PARTS} DONE _ 2>${ANSWER} || return 1
             PART=$(cat ${ANSWER})
             [[ "${PART}" = "DONE" ]] && break
             echo "${PART}" >>/tmp/.pvs-create
         done
         # final step ask if everything is ok?
-        DIALOG --yesno "Would you like to create physical volume on devices below?\n$(cat /tmp/.pvs-create | sed -e 's#$#\\n#g')" 0 0 && PVFINISH="DONE"
+        DIALOG --yesno $"Would you like to create physical volume on devices below?\n$(cat /tmp/.pvs-create | sed -e 's#$#\\n#g')" 0 0 && PVFINISH="DONE"
     done
-    DIALOG --infobox "Creating physical volume on ${PART}..." 0 0
+    DIALOG --infobox $"Creating physical volume on ${PART}..." 0 0
     PART="$(echo -n $(cat /tmp/.pvs-create))"
     pvcreate ${PART} >${LOG} 2>&1
     if [[ $? -gt 0 ]]; then
-        DIALOG --msgbox "Error creating physical volume on ${PART} (see ${LOG} for details)." 0 0
+        DIALOG --msgbox $"Error creating physical volume on ${PART} (see ${LOG} for details)." 0 0
         return 1
     fi
 }
@@ -1378,24 +1387,24 @@ _createvg()
         PVS=$(findpv _)
         # break if all devices are in use
         if [[ "${PVS}" = "" ]]; then
-            DIALOG --msgbox "No devices left for Volume Group creation." 0 0
+            DIALOG --msgbox $"No devices left for Volume Group creation." 0 0
             return 1
         fi
         # enter volume group name
         VGDEVICE=""
         while [[ "${VGDEVICE}" = "" ]]; do
-            DIALOG --inputbox "Enter the Volume Group name:\nfoogroup\n<yourvolumegroupname>\n\n" 15 65 "foogroup" 2>${ANSWER} || return 1
+            DIALOG --inputbox $"Enter the Volume Group name:\nfoogroup\n<yourvolumegroupname>\n\n" 15 65 "foogroup" 2>${ANSWER} || return 1
             VGDEVICE=$(cat ${ANSWER})
             if [[ "$(vgs -o vg_name --noheading 2>/dev/null | grep "^  $(echo ${VGDEVICE})")" ]]; then
-                DIALOG --msgbox "ERROR: You have defined 2 identical Volume Group names! Please enter another name." 8 65
+                DIALOG --msgbox $"ERROR: You have defined 2 identical Volume Group names! Please enter another name." 8 65
                 VGDEVICE=""
             fi
         done
         # show all devices with sizes
-        DIALOG --msgbox "Physical Volumes:\n$(getavailablepv)\n\nPhysical Volumes that are not shown in next dialog, are already in use!" 0 0
+        DIALOG --msgbox $"Physical Volumes:\n$(getavailablepv)\n\nPhysical Volumes that are not shown in next dialog, are already in use!" 0 0
         # select the first device to use, no missing option available!
         PVNUMBER=1
-        DIALOG --menu "Select Physical Volume ${PVNUMBER} for ${VGDEVICE}" 21 50 13 ${PVS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select Physical Volume ${PVNUMBER} for ${VGDEVICE}" 21 50 13 ${PVS} 2>${ANSWER} || return 1
         PV=$(cat ${ANSWER})
         echo "${PV}" >>/tmp/.pvs
         while [[ "${PVS}" != "DONE" ]]; do
@@ -1403,19 +1412,19 @@ _createvg()
             # clean loop from used partition and options
             PVS="$(echo ${PVS} | sed -e "s#${PV}\ _##g")"
             # add more devices
-            DIALOG --menu "Select additional Physical Volume ${PVNUMBER} for ${VGDEVICE}" 21 50 13 ${PVS} DONE _ 2>${ANSWER} || return 1
+            DIALOG --menu $"Select additional Physical Volume ${PVNUMBER} for ${VGDEVICE}" 21 50 13 ${PVS} DONE _ 2>${ANSWER} || return 1
             PV=$(cat ${ANSWER})
             [[ "${PV}" = "DONE" ]] && break
             echo "${PV}" >>/tmp/.pvs
         done
         # final step ask if everything is ok?
-        DIALOG --yesno "Would you like to create Volume Group like this?\n\n${VGDEVICE}\n\nPhysical Volumes:\n$(cat /tmp/.pvs | sed -e 's#$#\\n#g')" 0 0 && VGFINISH="DONE"
+        DIALOG --yesno $"Would you like to create Volume Group like this?\n\n${VGDEVICE}\n\nPhysical Volumes:\n$(cat /tmp/.pvs | sed -e 's#$#\\n#g')" 0 0 && VGFINISH="DONE"
     done
-    DIALOG --infobox "Creating Volume Group ${VGDEVICE}..." 0 0
+    DIALOG --infobox $"Creating Volume Group ${VGDEVICE}..." 0 0
     PV="$(echo -n $(cat /tmp/.pvs))"
     vgcreate ${VGDEVICE} ${PV} >${LOG} 2>&1
     if [[ $? -gt 0 ]]; then
-        DIALOG --msgbox "Error creating Volume Group ${VGDEVICE} (see ${LOG} for details)." 0 0
+        DIALOG --msgbox $"Error creating Volume Group ${VGDEVICE} (see ${LOG} for details)." 0 0
         return 1
     fi
 }
@@ -1430,38 +1439,38 @@ _createlv()
         LVS=$(findvg _)
         # break if all devices are in use
         if [[ "${LVS}" = "" ]]; then
-            DIALOG --msgbox "No Volume Groups with free space available for Logical Volume creation." 0 0
+            DIALOG --msgbox $"No Volume Groups with free space available for Logical Volume creation." 0 0
             return 1
         fi
         # show all devices with sizes
-        DIALOG --msgbox "Volume Groups:\n$(getavailablevg)\n\nVolume Groups that are not shown, are already 100% in use!" 0 0
-        DIALOG --menu "Select Volume Group" 21 50 13 ${LVS} 2>${ANSWER} || return 1
+        DIALOG --msgbox $"Volume Groups:\n$(getavailablevg)\n\nVolume Groups that are not shown, are already 100% in use!" 0 0
+        DIALOG --menu $"Select Volume Group" 21 50 13 ${LVS} 2>${ANSWER} || return 1
         LV=$(cat ${ANSWER})
         # enter logical volume name
         LVDEVICE=""
         while [[ "${LVDEVICE}" = "" ]]; do
-            DIALOG --inputbox "Enter the Logical Volume name:\nfooname\n<yourvolumename>\n\n" 15 65 "fooname" 2>${ANSWER} || return 1
+            DIALOG --inputbox $"Enter the Logical Volume name:\nfooname\n<yourvolumename>\n\n" 15 65 "fooname" 2>${ANSWER} || return 1
             LVDEVICE=$(cat ${ANSWER})
             if [[ "$(lvs -o lv_name,vg_name --noheading 2>/dev/null | grep " $(echo ${LVDEVICE}) $(echo ${LV})"$)" ]]; then
-                DIALOG --msgbox "ERROR: You have defined 2 identical Logical Volume names! Please enter another name." 8 65
+                DIALOG --msgbox $"ERROR: You have defined 2 identical Logical Volume names! Please enter another name." 8 65
                 LVDEVICE=""
             fi
         done
         while [[ "${LV_SIZE_SET}" = "" ]]; do
             LV_ALL=""
-            DIALOG --inputbox "Enter the size (MB) of your Logical Volume,\nMinimum value is > 0.\n\nVolume space left: $(vgs -o vg_free --noheading --units m ${LV})B\n\nIf you enter no value, all free space left will be used." 10 65 "" 2>${ANSWER} || return 1
+            DIALOG --inputbox $"Enter the size (MB) of your Logical Volume,\nMinimum value is > 0.\n\nVolume space left: $(vgs -o vg_free --noheading --units m ${LV})B\n\nIf you enter no value, all free space left will be used." 16 65 "" 2>${ANSWER} || return 1
                 LV_SIZE=$(cat ${ANSWER})
                 if [[ "${LV_SIZE}" = "" ]]; then
-                    DIALOG --yesno "Would you like to create Logical Volume with no free space left?" 0 0 && LV_ALL="1"
+                    DIALOG --yesno $"Would you like to create Logical Volume with no free space left?" 0 0 && LV_ALL="1"
                     if ! [[ "${LV_ALL}" = "1" ]]; then
                          LV_SIZE=0
                     fi
                 fi
                 if [[ "${LV_SIZE}" = "0" ]]; then
-                    DIALOG --msgbox "ERROR: You have entered a invalid size, please enter again." 0 0
+                    DIALOG --msgbox $"ERROR: You have entered a invalid size, please enter again." 0 0
                 else
                     if [[ "${LV_SIZE}" -ge "$(vgs -o vg_free --noheading --units m | sed -e 's#m##g')" ]]; then
-                        DIALOG --msgbox "ERROR: You have entered a too large size, please enter again." 0 0
+                        DIALOG --msgbox $"ERROR: You have entered a too large size, please enter again." 0 0
                     else
                         LV_SIZE_SET=1
                     fi
@@ -1469,7 +1478,7 @@ _createlv()
         done
         #Contiguous doesn't work with +100%FREE
         LV_CONTIGUOUS=""
-        [[ "${LV_ALL}" = "" ]] && DIALOG --defaultno --yesno "Would you like to create Logical Volume as a contiguous partition, that means that your space doesn't get partitioned over one or more disks nor over non-contiguous physical extents.\n(usefull for swap space etc.)?" 0 0 && LV_CONTIGUOUS="1"
+        [[ "${LV_ALL}" = "" ]] && DIALOG --defaultno --yesno $"Would you like to create Logical Volume as a contiguous partition, that means that your space doesn't get partitioned over one or more disks nor over non-contiguous physical extents.\n(usefull for swap space etc.)?" 0 0 && LV_CONTIGUOUS="1"
         if [[ "${LV_CONTIGUOUS}" = "1" ]]; then
             CONTIGUOUS=yes
             LV_EXTRA="-C y"
@@ -1479,16 +1488,16 @@ _createlv()
         fi
         [[ "${LV_SIZE}" = "" ]] && LV_SIZE="All free space left"
         # final step ask if everything is ok?
-        DIALOG --yesno "Would you like to create Logical Volume ${LVDEVICE} like this?\nVolume Group:\n${LV}\nVolume Size:\n${LV_SIZE}\nContiguous Volume:\n${CONTIGUOUS}" 0 0 && LVFINISH="DONE"
+        DIALOG --yesno $"Would you like to create Logical Volume ${LVDEVICE} like this?\nVolume Group:\n${LV}\nVolume Size:\n${LV_SIZE}\nContiguous Volume:\n${CONTIGUOUS}" 0 0 && LVFINISH="DONE"
     done
-    DIALOG --infobox "Creating Logical Volume ${LVDEVICE}..." 0 0
+    DIALOG --infobox $"Creating Logical Volume ${LVDEVICE}..." 0 0
     if [[ "${LV_ALL}" = "1" ]]; then
         lvcreate ${LV_EXTRA} -l +100%FREE ${LV} -n ${LVDEVICE} >${LOG} 2>&1
     else
         lvcreate ${LV_EXTRA} -L ${LV_SIZE} ${LV} -n ${LVDEVICE} >${LOG} 2>&1
     fi
     if [[ $? -gt 0 ]]; then
-        DIALOG --msgbox "Error creating Logical Volume ${LVDEVICE} (see ${LOG} for details)." 0 0
+        DIALOG --msgbox $"Error creating Logical Volume ${LVDEVICE} (see ${LOG} for details)." 0 0
         return 1
     fi
 }
@@ -1497,10 +1506,10 @@ _createlv()
 _enter_luks_name() {
     LUKSDEVICE=""
     while [[ "${LUKSDEVICE}" = "" ]]; do
-        DIALOG --inputbox "Enter the name for luks encrypted device ${PART}:\nfooname\n<yourname>\n\n" 15 65 "fooname" 2>${ANSWER} || return 1
+        DIALOG --inputbox $"Enter the name for luks encrypted device ${PART}:\nfooname\n<yourname>\n\n" 15 65 "fooname" 2>${ANSWER} || return 1
         LUKSDEVICE=$(cat ${ANSWER})
         if ! [[ "$(cryptsetup status ${LUKSDEVICE} | grep inactive)" ]]; then
-            DIALOG --msgbox "ERROR: You have defined 2 identical luks encryption device names! Please enter another name." 8 65
+            DIALOG --msgbox $"ERROR: You have defined 2 identical luks encryption device names! Please enter another name." 8 65
             LUKSDEVICE=""
         fi
     done
@@ -1510,33 +1519,33 @@ _enter_luks_name() {
 _enter_luks_passphrase () {
     LUKSPASSPHRASE=""
     while [[ "${LUKSPASSPHRASE}" = "" ]]; do
-        DIALOG --insecure --passwordbox "Enter passphrase for luks encrypted device ${PART}:" 0 0 2>${ANSWER} || return 1
+        DIALOG --insecure --passwordbox $"Enter passphrase for luks encrypted device ${PART}:" 0 0 2>${ANSWER} || return 1
         LUKSPASS=$(cat ${ANSWER})
-        DIALOG --insecure --passwordbox "Retype passphrase for luks encrypted device ${PART}:" 0 0 2>${ANSWER} || return 1
+        DIALOG --insecure --passwordbox $"Retype passphrase for luks encrypted device ${PART}:" 0 0 2>${ANSWER} || return 1
         LUKSPASS2=$(cat ${ANSWER})
         if [[ "${LUKSPASS}" = "${LUKSPASS2}" ]]; then
             LUKSPASSPHRASE=${LUKSPASS}
             echo ${LUKSPASSPHRASE} > /tmp/.passphrase
             LUKSPASSPHRASE=/tmp/.passphrase
         else
-             DIALOG --msgbox "Passphrases didn't match, please enter again." 0 0
+             DIALOG --msgbox $"Passphrases didn't match, please enter again." 0 0
         fi
     done
 }
 
 # opening luks
 _opening_luks() {
-    DIALOG --infobox "Opening encrypted ${PART}..." 0 0
+    DIALOG --infobox $"Opening encrypted ${PART}..." 0 0
     luksOpen_success="0"
     while [[ "${luksOpen_success}" = "0" ]]; do
         cryptsetup luksOpen ${PART} ${LUKSDEVICE} >${LOG} <${LUKSPASSPHRASE} && luksOpen_success=1
         if [[ "${luksOpen_success}" = "0" ]]; then
-            DIALOG --msgbox "Error: Passphrases didn't match, please enter again." 0 0
+            DIALOG --msgbox $"Error: Passphrases didn't match, please enter again." 0 0
             _enter_luks_passphrase || return 1
         fi
     done
     LUKSPASSPHRASE="$(cat ${LUKSPASSPHRASE})"
-    DIALOG --yesno "Would you like to save the passphrase of luks device in /etc/crypttab?\nName:${LUKSDEVICE}" 0 0 || LUKSPASSPHRASE="ASK"
+    DIALOG --yesno $"Would you like to save the passphrase of luks device in /etc/crypttab?\nName:${LUKSDEVICE}" 0 0 || LUKSPASSPHRASE="ASK"
     echo ${LUKSDEVICE} ${PART} ${LUKSPASSPHRASE} >> /tmp/.crypttab
     [[ -e /tmp/.passphrase ]] && rm /tmp/.passphrase
 }
@@ -1544,7 +1553,7 @@ _opening_luks() {
 # help for luks
 _helpluks()
 {
-DIALOG --msgbox "LUKS ENCRYPTION SUMMARY:\n
+DIALOG --msgbox $"LUKS ENCRYPTION SUMMARY:\n
 -----------------------------\n\n
 Encryption is useful for two (related) reasons.\n
 Firstly, it prevents anyone with physical access to your computer,\n
@@ -1633,21 +1642,21 @@ _luks()
         done
         # break if all devices are in use
         if [[ "${PARTS}" = "" ]]; then
-            DIALOG --msgbox "No devices left for luks encryption." 0 0
+            DIALOG --msgbox $"No devices left for luks encryption." 0 0
             return 1
         fi
         # show all devices with sizes
-        DIALOG --msgbox "DISKS:\n$(_getavaildisks)\n\nPARTITIONS:\n$(_getavailpartitions)\n\n" 0 0
-        DIALOG --menu "Select device for luks encryption" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
+        DIALOG --msgbox $"DISKS:\n$(_getavaildisks)\n\nPARTITIONS:\n$(_getavailpartitions)\n\n" 0 0
+        DIALOG --menu $"Select device for luks encryption" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
         PART=$(cat ${ANSWER})
         # enter luks name
         _enter_luks_name
         ### TODO: offer more options for encrypt!
         # final step ask if everything is ok?
-        DIALOG --yesno "Would you like to encrypt luks device below?\nName:${LUKSDEVICE}\nDevice:${PART}\n" 0 0 && LUKSFINISH="DONE"
+        DIALOG --yesno $"Would you like to encrypt luks device below?\nName:${LUKSDEVICE}\nDevice:${PART}\n" 0 0 && LUKSFINISH="DONE"
     done
     _enter_luks_passphrase
-    DIALOG --infobox "Encrypting ${PART}..." 0 0
+    DIALOG --infobox $"Encrypting ${PART}..." 0 0
     cryptsetup -c aes-cbc-essiv:sha256 -s 128 luksFormat ${PART} >${LOG} <${LUKSPASSPHRASE}
     _opening_luks
 }
@@ -1664,8 +1673,8 @@ autoprepare() {
     set_guid
     DISCS=$(default_blockdevices)
     if [[ "$(echo ${DISCS} | wc -w)" -gt 1 ]]; then
-        DIALOG --msgbox "Available Disks:\n\n$(_getavaildisks)\n" 0 0
-        DIALOG --menu "Select the hard drive to use" 14 55 7 $(default_blockdevices _) 2>${ANSWER} || return 1
+        DIALOG --msgbox $"Available Disks:\n\n$(_getavaildisks)\n" 0 0
+        DIALOG --menu $"Select the hard drive to use" 14 55 7 $(default_blockdevices _) 2>${ANSWER} || return 1
         DISC=$(cat ${ANSWER})
     else
         DISC=${DISCS}
@@ -1679,7 +1688,7 @@ autoprepare() {
     if [[ "$(cat ${block}/$(basename ${DISC} 2>/dev/null)/size 2>/dev/null)" ]]; then
         DISC_SIZE="$(($(expr $(cat ${block}/$(basename ${DISC})/queue/logical_block_size) '*' $(cat ${block}/$(basename ${DISC})/size))/1000000))"
     else
-        DIALOG --msgbox "ERROR: Setup cannot detect size of your device, please use normal installation routine for partitioning and mounting devices." 0 0
+        DIALOG --msgbox $"ERROR: Setup cannot detect size of your device, please use normal installation routine for partitioning and mounting devices." 0 0
         return 1
     fi
     while [[ "${DEFAULTFS}" = "" ]]; do
@@ -1703,13 +1712,13 @@ autoprepare() {
         fi
         DISC_SIZE=$((${DISC_SIZE}-${GUID_PART_SIZE}-${UEFISYS_PART_SIZE}))
         while [[ "${BOOT_PART_SET}" = "" ]]; do
-            DIALOG --inputbox "Enter the size (MB) of your /boot partition,\nMinimum value is 16.\n\nDisk space left: ${DISC_SIZE} MB" 10 65 "512" 2>${ANSWER} || return 1
+            DIALOG --inputbox $"Enter the size (MB) of your /boot partition,\nMinimum value is 16.\n\nDisk space left: ${DISC_SIZE} MB" 10 65 "512" 2>${ANSWER} || return 1
             BOOT_PART_SIZE="$(cat ${ANSWER})"
             if [[ "${BOOT_PART_SIZE}" = "" ]]; then
-                DIALOG --msgbox "ERROR: You have entered a invalid size, please enter again." 0 0
+                DIALOG --msgbox $"ERROR: You have entered a invalid size, please enter again." 0 0
             else
                 if [[ "${BOOT_PART_SIZE}" -ge "${DISC_SIZE}" || "${BOOT_PART_SIZE}" -lt "16" || "${SBOOT_PART_SIZE}" = "${DISC_SIZE}" ]]; then
-                    DIALOG --msgbox "ERROR: You have entered an invalid size, please enter again." 0 0
+                    DIALOG --msgbox $"ERROR: You have entered an invalid size, please enter again." 0 0
                 else
                     BOOT_PART_SET=1
                 fi
@@ -1719,13 +1728,13 @@ autoprepare() {
         SWAP_SIZE="256"
         [[ "${DISC_SIZE}" -lt "256" ]] && SWAP_SIZE="${DISC_SIZE}"
         while [[ "${SWAP_PART_SET}" = "" ]]; do
-            DIALOG --inputbox "Enter the size (MB) of your swap partition,\nMinimum value is > 0.\n\nDisk space left: ${DISC_SIZE} MB" 10 65 "${SWAP_SIZE}" 2>${ANSWER} || return 1
+            DIALOG --inputbox $"Enter the size (MB) of your swap partition,\nMinimum value is > 0.\n\nDisk space left: ${DISC_SIZE} MB" 10 65 "${SWAP_SIZE}" 2>${ANSWER} || return 1
             SWAP_PART_SIZE=$(cat ${ANSWER})
             if [[ "${SWAP_PART_SIZE}" = "" || "${SWAP_PART_SIZE}" = "0" ]]; then
-                DIALOG --msgbox "ERROR: You have entered an invalid size, please enter again." 0 0
+                DIALOG --msgbox $"ERROR: You have entered an invalid size, please enter again." 0 0
             else
                 if [[ "${SWAP_PART_SIZE}" -ge "${DISC_SIZE}" ]]; then
-                    DIALOG --msgbox "ERROR: You have entered a too large size, please enter again." 0 0
+                    DIALOG --msgbox $"ERROR: You have entered a too large size, please enter again." 0 0
                 else
                     SWAP_PART_SET=1
                 fi
@@ -1735,38 +1744,38 @@ autoprepare() {
         ROOT_SIZE="7500"
         [[ "${DISC_SIZE}" -lt "7500" ]] && ROOT_SIZE="${DISC_SIZE}"
         while [[ "${ROOT_PART_SET}" = "" ]]; do
-        DIALOG --inputbox "Enter the size (MB) of your / partition,\nthe /home partition will use the remaining space.\n\nDisk space left:  ${DISC_SIZE} MB" 10 65 "${ROOT_SIZE}" 2>${ANSWER} || return 1
+        DIALOG --inputbox $"Enter the size (MB) of your / partition,\nthe /home partition will use the remaining space.\n\nDisk space left:  ${DISC_SIZE} MB" 10 65 "${ROOT_SIZE}" 2>${ANSWER} || return 1
         ROOT_PART_SIZE=$(cat ${ANSWER})
             if [[ "${ROOT_PART_SIZE}" = "" || "${ROOT_PART_SIZE}" = "0" ]]; then
-                DIALOG --msgbox "ERROR: You have entered an invalid size, please enter again." 0 0
+                DIALOG --msgbox $"ERROR: You have entered an invalid size, please enter again." 0 0
             else
                 if [[ "${ROOT_PART_SIZE}" -ge "${DISC_SIZE}" ]]; then
-                    DIALOG --msgbox "ERROR: You have entered a too large size, please enter again." 0 0
+                    DIALOG --msgbox $"ERROR: You have entered a too large size, please enter again." 0 0
                 else
-                    DIALOG --yesno "$((${DISC_SIZE}-${ROOT_PART_SIZE})) MB will be used for your /home partition. Is this OK?" 0 0 && ROOT_PART_SET=1
+                    DIALOG --yesno $"$((${DISC_SIZE}-${ROOT_PART_SIZE})) MB will be used for your /home partition. Is this OK?" 0 0 && ROOT_PART_SET=1
                 fi
             fi
         done
         while [[ "${CHOSEN_FS}" = "" ]]; do
-            DIALOG --menu "Select a filesystem for / and /home:" 16 45 8 ${FSOPTS} 2>${ANSWER} || return 1
+            DIALOG --menu $"Select a filesystem for / and /home:" 16 45 8 ${FSOPTS} 2>${ANSWER} || return 1
             FSTYPE=$(cat ${ANSWER})
-            DIALOG --yesno "${FSTYPE} will be used for / and /home. Is this OK?" 0 0 && CHOSEN_FS=1
+            DIALOG --yesno $"${FSTYPE} will be used for / and /home. Is this OK?" 0 0 && CHOSEN_FS=1
         done
         DEFAULTFS=1
     done
-    DIALOG --defaultno --yesno "${DISC} will be COMPLETELY ERASED!  Are you absolutely sure?" 0 0 \
+    DIALOG --defaultno --yesno $"${DISC} will be COMPLETELY ERASED!  Are you absolutely sure?" 0 0 \
     || return 1
     DEVICE=${DISC}
 
     # validate DEVICE
     if [[ ! -b "${DEVICE}" ]]; then
-      DIALOG --msgbox "Device '${DEVICE}' is not valid" 0 0
+      DIALOG --msgbox $"Device '${DEVICE}' is not valid" 0 0
       return 1
     fi
 
     # validate DEST
     if [[ ! -d "${DESTDIR}" ]]; then
-        DIALOG --msgbox "Destination directory '${DESTDIR}' is not valid" 0 0
+        DIALOG --msgbox $"Destination directory '${DESTDIR}' is not valid" 0 0
         return 1
     fi
 
@@ -1781,7 +1790,7 @@ autoprepare() {
         PART_ROOT="${DEVICE}5"
         # GPT (GUID) is supported only by 'parted' or 'sgdisk'
         printk off
-        DIALOG --infobox "Partitioning ${DEVICE}" 0 0
+        DIALOG --infobox $"Partitioning ${DEVICE}" 0 0
         # clean partition table to avoid issues!
         sgdisk --zap ${DEVICE} &>/dev/null
         # clear all magic strings/signatures - mdadm, lvm, partition tables etc.
@@ -1801,7 +1810,7 @@ autoprepare() {
         PART_ROOT="${DEVICE}3"
         # start at sector 1 for 4k drive compatibility and correct alignment
         printk off
-        DIALOG --infobox "Partitioning ${DEVICE}" 0 0
+        DIALOG --infobox $"Partitioning ${DEVICE}" 0 0
         # clean partitiontable to avoid issues!
         dd if=/dev/zero of=${DEVICE} bs=512 count=2048 >/dev/null 2>&1
         wipefs -a ${DEVICE} &>/dev/null
@@ -1814,7 +1823,7 @@ autoprepare() {
         parted -a optimal -s ${DEVICE} mkpart primary $((${GUID_PART_SIZE}+${BOOT_PART_SIZE}+${SWAP_PART_SIZE}+${ROOT_PART_SIZE})) 100% >${LOG}
     fi
     if [[ $? -gt 0 ]]; then
-        DIALOG --msgbox "Error partitioning ${DEVICE} (see ${LOG} for details)" 0 0
+        DIALOG --msgbox $"Error partitioning ${DEVICE} (see ${LOG} for details)" 0 0
         printk on
         return 1
     fi
@@ -1848,12 +1857,12 @@ autoprepare() {
         dosubvolume="no"
         # if echo "${mountpoint}" | tr -d ' ' | grep '^/$' 2>&1 >/dev/null; then
         # if [[ "$(echo ${mountpoint} | tr -d ' ' | grep '^/$' | wc -l)" -eq 0 ]]; then
-        DIALOG --infobox "Creating ${fstype} on ${DEVICE}${part}\nwith FSLABEL ${labelname} .\nMountpoint is ${mountpoint} ." 0 0
+        DIALOG --infobox $"Creating ${fstype} on ${DEVICE}${part}\nwith FSLABEL ${labelname} .\nMountpoint is ${mountpoint} ." 0 0
         _mkfs yes "${DEVICE}${part}" "${fstype}" "${DESTDIR}" "${mountpoint}" "${labelname}" "${fsoptions}" "${btrfsdevices}" "${btrfssubvolume}" "${btrfslevel}" "${dosubvolume}" "${btrfssd}" "${btrfscompress}" || return 1
         # fi
     done
 
-    DIALOG --msgbox "Auto-prepare was successful" 0 0
+    DIALOG --msgbox $"Auto-prepare was successful" 0 0
     S_MKFSAUTO=1
 }
 
@@ -1862,7 +1871,7 @@ check_gpt() {
     [[ "$(${_BLKID} -p -i -o value -s PTTYPE ${DISC})" == "gpt" ]] && GUID_DETECTED="1"
     
     if [[ "${GUID_DETECTED}" == "" ]]; then
-        DIALOG --defaultno --yesno "Setup detected no GUID (gpt) partition table on ${DISC}.\n\nDo you want to convert the existing MBR table in ${DISC} to a GUID (gpt) partition table?\n\nNOTE:\nBIOS-GPT boot may not work in some Lenovo systems (irrespective of the bootloader used). " 0 0 || return 1
+        DIALOG --defaultno --yesno $"Setup detected no GUID (gpt) partition table on ${DISC}.\n\nDo you want to convert the existing MBR table in ${DISC} to a GUID (gpt) partition table?\n\nNOTE:\nBIOS-GPT boot may not work in some Lenovo systems (irrespective of the bootloader used). " 0 0 || return 1
         sgdisk --mbrtogpt ${DISC} > ${LOG} && GUID_DETECTED="1"
     fi
     
@@ -1873,14 +1882,14 @@ check_gpt() {
         
         if [[ "${CHECK_BIOS_BOOT_GRUB}" == "1" ]]; then
             if ! [[ "$(sgdisk -p ${DISC} | grep 'EF02')" ]]; then
-                DIALOG --msgbox "Setup detected no BIOS BOOT PARTITION in ${DISC}. Please create a >=1 MB BIOS Boot partition for grub-bios GPT support." 0 0
+                DIALOG --msgbox $"Setup detected no BIOS BOOT PARTITION in ${DISC}. Please create a >=1 MB BIOS Boot partition for grub-bios GPT support." 0 0
                 RUN_CGDISK="1"
             fi
         fi
     fi
     
     if [[ "${RUN_CGDISK}" == "1" ]]; then
-        DIALOG --msgbox "Now you'll be put into cgdisk where you can partition your hard drive.\nYou should make a swap partition and as many data partitions as you will need." 18 70
+        DIALOG --msgbox $"Now you'll be put into cgdisk where you can partition your hard drive.\nYou should make a swap partition and as many data partitions as you will need." 18 70
         clear && cgdisk ${DISC}
     fi
 }
@@ -1889,12 +1898,12 @@ check_gpt() {
 check_uefisyspart() {
     
     if [[ "$(${_BLKID} -p -i -o value -s PTTYPE ${DISC})" != "gpt" ]]; then
-        DIALOG --msgbox "Setup detected no GUID (gpt) partition table on ${DISC}.\nUEFI boot requires ${DISC} to be partitioned as GPT.\nSetup will now try to non-destructively convert ${DISC} to GPT using sgdisk." 0 0
+        DIALOG --msgbox $"Setup detected no GUID (gpt) partition table on ${DISC}.\nUEFI boot requires ${DISC} to be partitioned as GPT.\nSetup will now try to non-destructively convert ${DISC} to GPT using sgdisk." 0 0
         sgdisk --mbrtogpt "${DISC}" > "${LOG}" && GUID_DETECTED="1"
     fi
     
     if [[ ! "$(sgdisk -p ${DISC} | grep 'EF00')" ]]; then
-        DIALOG --msgbox "Setup detected no UEFI SYSTEM PARTITION in ${DISC}. You will now be put into cgdisk. Please create a >=512 MiB partition with gdisk type code EF00 .\nWhen prompted (later) to format as FAT32, say Yes.\nIf you already have a >=512 MiB FAT32 UEFI SYSTEM Partition, check whether that partition has EF00 gdisk type code." 0 0
+        DIALOG --msgbox $"Setup detected no UEFI SYSTEM PARTITION in ${DISC}. You will now be put into cgdisk. Please create a >=512 MiB partition with gdisk type code EF00 .\nWhen prompted (later) to format as FAT32, say Yes.\nIf you already have a >=512 MiB FAT32 UEFI SYSTEM Partition, check whether that partition has EF00 gdisk type code." 0 0
         clear && cgdisk "${DISC}"
         RUN_CGDISK=""
     fi
@@ -1906,11 +1915,11 @@ check_uefisyspart() {
         if [[ "$(${_BLKID} -p -i -o value -s TYPE ${UEFISYS_PART})" == "vfat" ]]; then
             if [[ "$(${_BLKID} -p -i -o value -s VERSION ${UEFISYS_PART})" != "FAT32" ]]; then
                 ## Check whether UEFISYS is FAT32 (specifically), otherwise warn the user (but do not exit).
-                DIALOG --defaultno --yesno "UEFI SYSTEM PARTIION ${UEFISYS_PART} is not FAT32 formatted. Some UEFI firmwares may not work properly with a FAT16 or FAT12 filesystem in the UEFISYS partition.\nDo you want to format ${UEFISYS_PART} as FAT32?" 0 0 && _FORMAT_UEFISYS_FAT32="1"
+                DIALOG --defaultno --yesno $"UEFI SYSTEM PARTIION ${UEFISYS_PART} is not FAT32 formatted. Some UEFI firmwares may not work properly with a FAT16 or FAT12 filesystem in the UEFISYS partition.\nDo you want to format ${UEFISYS_PART} as FAT32?" 0 0 && _FORMAT_UEFISYS_FAT32="1"
             fi
         else
             ## Check whether UEFISYS is FAT, otherwise inform the user and offer to format the partition as FAT32.
-            DIALOG --defaultno --yesno "UEFI Specification requires UEFI SYSTEM PARTIION to be formatted as FAT32.\nDo you want to format ${UEFISYS_PART} as FAT32?" 0 0 && _FORMAT_UEFISYS_FAT32="1"
+            DIALOG --defaultno --yesno $"UEFI Specification requires UEFI SYSTEM PARTIION to be formatted as FAT32.\nDo you want to format ${UEFISYS_PART} as FAT32?" 0 0 && _FORMAT_UEFISYS_FAT32="1"
         fi
         
         umount "${DESTDIR}/boot/efi" &> /dev/null
@@ -1926,7 +1935,7 @@ check_uefisyspart() {
         if [[ "$(${_BLKID} -p -i -o value -s TYPE ${UEFISYS_PART})" == "vfat" ]]; then
             mount -o rw,flush -t vfat "${UEFISYS_PART}" "${DESTDIR}/boot/efi"
         else
-            DIALOG --msgbox "${UEFISYS_PART} is not formatted using FAT filesystem. Setup will go ahead but there might be issues using non-FAT FS for UEFISYS partition." 0 0
+            DIALOG --msgbox $"${UEFISYS_PART} is not formatted using FAT filesystem. Setup will go ahead but there might be issues using non-FAT FS for UEFISYS partition." 0 0
             
             mount -o rw "${UEFISYS_PART}" "${DESTDIR}/boot/efi"
         fi
@@ -1939,7 +1948,7 @@ check_uefisyspart() {
         
         [[ ! -d "${DESTDIR}/boot/efi/EFI" ]] && mkdir -p "${DESTDIR}/boot/efi/EFI"
     else
-        DIALOG --msgbox "Setup did not find any UEFI SYSTEM PARTITION in ${DISC}. Please create a >=512MiB FAT32 partition with gdisk type code EFOO and try again." 0 0
+        DIALOG --msgbox $"Setup did not find any UEFI SYSTEM PARTITION in ${DISC}. Please create a >=512MiB FAT32 partition with gdisk type code EFOO and try again." 0 0
         return 1
     fi
     
@@ -1961,14 +1970,14 @@ partition() {
     # Select disk to partition
     DISCS=$(finddisks _)
     DISCS="${DISCS} OTHER _ DONE +"
-    DIALOG --msgbox "Available Disks:\n\n$(_getavaildisks)\n" 0 0
+    DIALOG --msgbox $"Available Disks:\n\n$(_getavaildisks)\n" 0 0
     DISC=""
     while true; do
         # Prompt the user with a list of known disks
-        DIALOG --menu "Select the disk you want to partition\n(select DONE when finished)" 14 55 7 ${DISCS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select the disk you want to partition\n(select DONE when finished)" 14 55 7 ${DISCS} 2>${ANSWER} || return 1
         DISC=$(cat ${ANSWER})
         if [[ "${DISC}" == "OTHER" ]]; then
-            DIALOG --inputbox "Enter the full path to the device you wish to partition" 8 65 "/dev/sda" 2>${ANSWER} || DISC=""
+            DIALOG --inputbox $"Enter the full path to the device you wish to partition" 8 65 "/dev/sda" 2>${ANSWER} || DISC=""
             DISC=$(cat ${ANSWER})
         fi
         # Leave our loop if the user is done partitioning
@@ -1984,14 +1993,14 @@ partition() {
                 [[ "$(${_BLKID} -p -i -o value -s PTTYPE ${DISC})" == "dos" ]] && MSDOS_DETECTED="1"
                 
                 if [[ "${MSDOS_DETECTED}" == "" ]]; then
-                    DIALOG --defaultno --yesno "Setup detected no MS-DOS partition table on ${DISC}.\nDo you want to create a MS-DOS partition table now on ${DISC}?\n\n${DISC} will be COMPLETELY ERASED!  Are you absolutely sure?" 0 0 || return 1
+                    DIALOG --defaultno --yesno $"Setup detected no MS-DOS partition table on ${DISC}.\nDo you want to create a MS-DOS partition table now on ${DISC}?\n\n${DISC} will be COMPLETELY ERASED!  Are you absolutely sure?" 0 0 || return 1
                     # clean partitiontable to avoid issues!
                     dd if=/dev/zero of=${DEVICE} bs=512 count=2048 >/dev/null 2>&1
                     wipefs -a ${DEVICE} /dev/null 2>&1
                     parted -a optimal -s ${DISC} mktable msdos >${LOG}
                 fi
                 # Partition disc
-                DIALOG --msgbox "Now you'll be put into the parted shell where you can partition your hard drive. You should make a swap partition and as many data partitions as you will need.\n\nShort command list:\n- 'help' to get help text\n- 'print' to show  partition table\n- 'mkpart' for new partition\n- 'rm' for deleting a partition\n- 'quit' to leave parted\n\nNOTE: parted may tell you to reboot after creating partitions.  If you need to reboot, just re-enter this install program, skip this step and go on." 18 70
+                DIALOG --msgbox $"Now you'll be put into the parted shell where you can partition your hard drive. You should make a swap partition and as many data partitions as you will need.\n\nShort command list:\n- 'help' to get help text\n- 'print' to show  partition table\n- 'mkpart' for new partition\n- 'rm' for deleting a partition\n- 'quit' to leave parted\n\nNOTE: parted may tell you to reboot after creating partitions.  If you need to reboot, just re-enter this install program, skip this step and go on." 18 70
                 clear
                 ## Use parted for correct alignment, cfdisk does not align correct!
                 parted ${DISC} print
@@ -2087,12 +2096,12 @@ btrfs_compress() {
     BTRFS_COMPRESS="NONE"
     BTRFS_COMPRESSLEVELS="lzo - zlib -"
     if [[ "${BTRFS_SUBVOLUME}" = "NONE" ]]; then
-        DIALOG --defaultno --yesno "Would you like to compress the data on ${PART}?" 0 0 && BTRFS_COMPRESS="compress"
+        DIALOG --defaultno --yesno $"Would you like to compress the data on ${PART}?" 0 0 && BTRFS_COMPRESS="compress"
     else
-        DIALOG --defaultno --yesno "Would you like to compress the data on ${PART} subvolume=${BTRFS_SUBVOLUME}?" 0 0 && BTRFS_COMPRESS="compress"
+        DIALOG --defaultno --yesno $"Would you like to compress the data on ${PART} subvolume=${BTRFS_SUBVOLUME}?" 0 0 && BTRFS_COMPRESS="compress"
     fi
     if [[ "${BTRFS_COMPRESS}" = "compress" ]]; then
-        DIALOG --menu "Select the compression method you want to use" 21 50 9 ${BTRFS_COMPRESSLEVELS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select the compression method you want to use" 21 50 9 ${BTRFS_COMPRESSLEVELS} 2>${ANSWER} || return 1
         BTRFS_COMPRESS="compress=$(cat ${ANSWER})"
     fi
 }
@@ -2101,9 +2110,9 @@ btrfs_compress() {
 btrfs_ssd() {
     BTRFS_SSD="NONE"
     if [[ "${BTRFS_SUBVOLUME}" = "NONE" ]]; then
-        DIALOG --defaultno --yesno "Would you like to optimize the data for ssd disk usage on ${PART}?" 0 0 && BTRFS_SSD="ssd"
+        DIALOG --defaultno --yesno $"Would you like to optimize the data for ssd disk usage on ${PART}?" 0 0 && BTRFS_SSD="ssd"
     else
-        DIALOG --defaultno --yesno "Would you like to optimize the data for ssd disk usage on ${PART} subvolume=${BTRFS_SUBVOLUME}?" 0 0 && BTRFS_SSD="ssd"
+        DIALOG --defaultno --yesno $"Would you like to optimize the data for ssd disk usage on ${PART} subvolume=${BTRFS_SUBVOLUME}?" 0 0 && BTRFS_SSD="ssd"
     fi
 }
 
@@ -2153,9 +2162,9 @@ btrfs_raid_level() {
     BTRFS_LEVEL=""
     BTRFS_DEVICE="${PART}"
     : >/tmp/.btrfs-devices
-    DIALOG --msgbox "BTRFS RAID OPTIONS:\n\nBTRFS has options to control the raid configuration for data and metadata.\nValid choices are raid0, raid1, raid10 and single.\nsingle means that no duplication of metadata is done, which may be desired when using hardware raid. raid10 requires at least 4 devices.\n\nIf you don't need this feature select NONE." 0 0
+    DIALOG --msgbox $"BTRFS RAID OPTIONS:\n\nBTRFS has options to control the raid configuration for data and metadata.\nValid choices are raid0, raid1, raid10 and single.\nsingle means that no duplication of metadata is done, which may be desired when using hardware raid. raid10 requires at least 4 devices.\n\nIf you don't need this feature select NONE." 0 0
     while [[ "${BTRFS_RAID_FINISH}" != "DONE" ]]; do
-        DIALOG --menu "Select the raid level you want to use" 21 50 9 ${BTRFS_RAIDLEVELS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select the raid level you want to use" 21 50 9 ${BTRFS_RAIDLEVELS} 2>${ANSWER} || return 1
         BTRFS_LEVEL=$(cat ${ANSWER})
         if [[ "${BTRFS_LEVEL}" = "NONE" ]]; then
             echo "${BTRFS_DEVICE}" >>/tmp/.btrfs-devices
@@ -2178,7 +2187,7 @@ select_btrfs_raid_devices () {
     echo "${BTRFS_PART}" >>/tmp/.btrfs-devices
     BTRFS_PARTS="$(echo ${BTRFS_PARTS} | sed -e "s#${BTRFS_PART}\ _##g")"
     RAIDNUMBER=2
-    DIALOG --menu "Select device ${RAIDNUMBER}" 21 50 13 ${BTRFS_PARTS} 2>${ANSWER} || return 1
+    DIALOG --menu $"Select device ${RAIDNUMBER}" 21 50 13 ${BTRFS_PARTS} 2>${ANSWER} || return 1
     BTRFS_PART=$(cat ${ANSWER})
     echo "${BTRFS_PART}" >>/tmp/.btrfs-devices
     while [[ "${BTRFS_PART}" != "DONE" ]]; do
@@ -2190,13 +2199,13 @@ select_btrfs_raid_devices () {
         # clean loop from used partition and options
         BTRFS_PARTS="$(echo ${BTRFS_PARTS} | sed -e "s#${BTRFS_PART}\ _##g")"
         # add more devices
-        DIALOG --menu "Select device ${RAIDNUMBER}" 21 50 13 ${BTRFS_PARTS} ${BTRFS_DONE} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select device ${RAIDNUMBER}" 21 50 13 ${BTRFS_PARTS} ${BTRFS_DONE} 2>${ANSWER} || return 1
         BTRFS_PART=$(cat ${ANSWER})
         [[ "${BTRFS_PART}" = "DONE" ]] && break
         echo "${BTRFS_PART}" >>/tmp/.btrfs-devices
      done
      # final step ask if everything is ok?
-     DIALOG --yesno "Would you like to create btrfs raid like this?\n\nLEVEL:\n${BTRFS_LEVEL}\n\nDEVICES:\n$(for i in $(cat /tmp/.btrfs-devices); do echo "${i}\n"; done)" 0 0 && BTRFS_RAID_FINISH="DONE"
+     DIALOG --yesno $"Would you like to create btrfs raid like this?\n\nLEVEL:\n${BTRFS_LEVEL}\n\nDEVICES:\n$(for i in $(cat /tmp/.btrfs-devices); do echo "${i}\n"; done)" 0 0 && BTRFS_RAID_FINISH="DONE"
 }
 
 # prepare new btrfs device
@@ -2210,14 +2219,14 @@ prepare_btrfs_subvolume() {
     DOSUBVOLUME="no"
     BTRFS_SUBVOLUME="NONE"
     if [[ "${SKIP_ASK_SUBVOLUME}" = "no" ]]; then
-        DIALOG --defaultno --yesno "Would you like to create a new subvolume on ${PART}?" 0 0 && DOSUBVOLUME="yes"
+        DIALOG --defaultno --yesno $"Would you like to create a new subvolume on ${PART}?" 0 0 && DOSUBVOLUME="yes"
     else
         DOSUBVOLUME="yes"
     fi
     if [[ "${DOSUBVOLUME}" = "yes" ]]; then
         BTRFS_SUBVOLUME="NONE"
         while [[ "${BTRFS_SUBVOLUME}" = "NONE" ]]; do
-            DIALOG --inputbox "Enter the SUBVOLUME name for the device, keep it short\nand use no spaces or special\ncharacters." 10 65 2>${ANSWER} || return 1
+            DIALOG --inputbox $"Enter the SUBVOLUME name for the device, keep it short\nand use no spaces or special\ncharacters." 10 65 2>${ANSWER} || return 1
             BTRFS_SUBVOLUME=$(cat ${ANSWER})
             check_btrfs_subvolume
         done
@@ -2233,7 +2242,7 @@ check_btrfs_subvolume(){
         mount_btrfs
         for i in $(btrfs subvolume list ${BTRFSMP} | cut -d " " -f 7); do
             if [[ "$(echo ${i} | grep "${BTRFS_SUBVOLUME}"$)" ]]; then
-                DIALOG --msgbox "ERROR: You have defined 2 identical SUBVOLUME names or an empty name! Please enter another name." 8 65
+                DIALOG --msgbox $"ERROR: You have defined 2 identical SUBVOLUME names or an empty name! Please enter another name." 8 65
                 BTRFS_SUBVOLUME="NONE"
             fi
         done
@@ -2241,7 +2250,7 @@ check_btrfs_subvolume(){
     else
         subvolumes_in_use
         if [[ "$(echo ${SUBVOLUME_IN_USE} | egrep "${BTRFS_SUBVOLUME}")" ]]; then
-            DIALOG --msgbox "ERROR: You have defined 2 identical SUBVOLUME names or an empty name! Please enter another name." 8 65
+            DIALOG --msgbox $"ERROR: You have defined 2 identical SUBVOLUME names or an empty name! Please enter another name." 8 65
             BTRFS_SUBVOLUME="NONE"
         fi
     fi
@@ -2269,11 +2278,11 @@ choose_btrfs_subvolume () {
         SUBVOLUMES=$(echo ${SUBVOLUMES} | sed -e "s#${i}\ _##g")
     done
     if [[ -n "${SUBVOLUMES}" ]]; then
-        DIALOG --menu "Select the subvolume to mount" 21 50 13 ${SUBVOLUMES} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select the subvolume to mount" 21 50 13 ${SUBVOLUMES} 2>${ANSWER} || return 1
         BTRFS_SUBVOLUME=$(cat ${ANSWER})
     else
         if [[ "${SUBVOLUMES_DETECTED}" = "yes" ]]; then
-            DIALOG --msgbox "ERROR: All subvolumes of the device are already in use. Switching to create a new one now." 8 65
+            DIALOG --msgbox $"ERROR: All subvolumes of the device are already in use. Switching to create a new one now." 8 65
             SKIP_ASK_SUBVOLUME=yes
             prepare_btrfs_subvolume || return 1
         fi
@@ -2283,7 +2292,7 @@ choose_btrfs_subvolume () {
 # boot on btrfs subvolume is not supported
 check_btrfs_boot_subvolume() {
     if [[ "${MP}" = "/boot" && "${FSTYPE}" = "btrfs" && ! "${BTRFS_SUBVOLUME}" = "NONE" ]]; then
-        DIALOG --msgbox "ERROR: \n/boot on a btrfs subvolume is not supported by any bootloader yet!" 8 65
+        DIALOG --msgbox $"ERROR: \n/boot on a btrfs subvolume is not supported by any bootloader yet!" 8 65
         FILESYSTEM_FINISH="no"
     fi
 }
@@ -2324,7 +2333,7 @@ select_filesystem() {
     [[ "$(which mkfs.jfs 2>/dev/null)" ]] && FSOPTS="${FSOPTS} jfs JFS"
     [[ "$(which mkfs.ntfs 2>/dev/null)" && "${DO_ROOT}" = "DONE" ]] && FSOPTS="${FSOPTS} ntfs-3g NTFS"
     [[ "$(which mkfs.vfat 2>/dev/null)" && "${DO_ROOT}" = "DONE" ]] && FSOPTS="${FSOPTS} vfat VFAT"
-    DIALOG --menu "Select a filesystem for ${PART}" 21 50 13 ${FSOPTS} 2>${ANSWER} || return 1
+    DIALOG --menu $"Select a filesystem for ${PART}" 21 50 13 ${FSOPTS} 2>${ANSWER} || return 1
     FSTYPE=$(cat ${ANSWER})
 }
 
@@ -2332,10 +2341,10 @@ enter_mountpoint() {
     FILESYSTEM_FINISH=""
     MP=""
     while [[ "${MP}" = "" ]]; do
-        DIALOG --inputbox "Enter the mountpoint for ${PART}" 8 65 "/boot" 2>${ANSWER} || return 1
+        DIALOG --inputbox $"Enter the mountpoint for ${PART}" 8 65 "/boot" 2>${ANSWER} || return 1
         MP=$(cat ${ANSWER})
         if grep ":${MP}:" /tmp/.parts; then
-            DIALOG --msgbox "ERROR: You have defined 2 identical mountpoints! Please select another mountpoint." 8 65
+            DIALOG --msgbox $"ERROR: You have defined 2 identical mountpoints! Please select another mountpoint." 8 65
             MP=""
         fi
     done
@@ -2359,14 +2368,14 @@ create_filesystem() {
     FS_OPTIONS=""
     BTRFS_DEVICES=""
     BTRFS_LEVEL=""
-    DIALOG --yesno "Would you like to create a filesystem on ${PART}?\n\n(This will overwrite existing data!)" 0 0 && DOMKFS="yes"
+    DIALOG --yesno $"Would you like to create a filesystem on ${PART}?\n\n(This will overwrite existing data!)" 0 0 && DOMKFS="yes"
     if [[ "${DOMKFS}" = "yes" ]]; then
         while [[ "${LABEL_NAME}" = "" ]]; do
-            DIALOG --inputbox "Enter the LABEL name for the device, keep it short\n(not more than 12 characters) and use no spaces or special\ncharacters." 10 65 \
+            DIALOG --inputbox $"Enter the LABEL name for the device, keep it short\n(not more than 12 characters) and use no spaces or special\ncharacters." 10 65 \
             "$(${_BLKID} -p -i -o value -s LABEL ${PART})" 2>${ANSWER} || return 1
             LABEL_NAME=$(cat ${ANSWER})
             if grep ":${LABEL_NAME}$" /tmp/.parts; then
-                DIALOG --msgbox "ERROR: You have defined 2 identical LABEL names! Please enter another name." 8 65
+                DIALOG --msgbox $"ERROR: You have defined 2 identical LABEL names! Please enter another name." 8 65
                 LABEL_NAME=""
             fi
         done
@@ -2375,7 +2384,7 @@ create_filesystem() {
             btrfs_compress
             btrfs_ssd
         fi
-        DIALOG --inputbox "Enter additional options to the filesystem creation utility.\nUse this field only, if the defaults are not matching your needs,\nelse just leave it empty." 10 70  2>${ANSWER} || return 1
+        DIALOG --inputbox $"Enter additional options to the filesystem creation utility.\nUse this field only, if the defaults are not matching your needs,\nelse just leave it empty." 10 70  2>${ANSWER} || return 1
         FS_OPTIONS=$(cat ${ANSWER})
     fi
     FILESYSTEM_FINISH="yes"
@@ -2391,12 +2400,12 @@ mountpoints() {
         #
         # Select mountpoints
         #
-        DIALOG --msgbox "Available partitions:\n\n$(_getavailpartitions)\n" 0 0
+        DIALOG --msgbox $"Available partitions:\n\n$(_getavailpartitions)\n" 0 0
         PARTS=$(findpartitions _)
         DO_SWAP=""
         while [[ "${DO_SWAP}" != "DONE" ]]; do
             FSTYPE="swap"
-            DIALOG --menu "Select the partition to use as swap" 21 50 13 NONE - ${PARTS} 2>${ANSWER} || return 1
+            DIALOG --menu $"Select the partition to use as swap" 21 50 13 NONE - ${PARTS} 2>${ANSWER} || return 1
             PART=$(cat ${ANSWER})
             if [[ "${PART}" != "NONE" ]]; then
                 DOMKFS="no"
@@ -2417,7 +2426,7 @@ mountpoints() {
         fi
         DO_ROOT=""
         while [[ "${DO_ROOT}" != "DONE" ]]; do
-            DIALOG --menu "Select the partition to mount as /" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
+            DIALOG --menu $"Select the partition to mount as /" 21 50 13 ${PARTS} 2>${ANSWER} || return 1
             PART=$(cat ${ANSWER})
             PART_ROOT=${PART}
             # Select root filesystem type
@@ -2444,7 +2453,7 @@ mountpoints() {
         while [[ "${PART}" != "DONE" ]]; do
             DO_ADDITIONAL=""
             while [[ "${DO_ADDITIONAL}" != "DONE" ]]; do
-                DIALOG --menu "Select any additional partitions to mount under your new root (select DONE when finished)" 21 52 13 ${PARTS} DONE _ 2>${ANSWER} || return 1
+                DIALOG --menu $"Select any additional partitions to mount under your new root (select DONE when finished)" 21 52 13 ${PARTS} DONE _ 2>${ANSWER} || return 1
                 PART=$(cat ${ANSWER})
                 if [[ "${PART}" != "DONE" ]]; then
                     FSTYPE="$(${_BLKID} -p -i  -o value -s TYPE ${PART})"
@@ -2473,7 +2482,7 @@ mountpoints() {
                 ! [[ "${FSTYPE}" = "btrfs" ]] && PARTS="$(echo ${PARTS} | sed -e "s#${PART}\ _##g")"
             fi
         done
-        DIALOG --yesno "Would you like to create and mount the filesytems like this?\n\nSyntax\n------\nDEVICE:TYPE:MOUNTPOINT:FORMAT:LABEL:FSOPTIONS:BTRFS_DETAILS\n\n$(for i in $(cat /tmp/.parts | sed -e 's, ,#,g'); do echo "${i}\n";done)" 0 0 && PARTFINISH="DONE"
+        DIALOG --yesno $"Would you like to create and mount the filesytems like this?\n\nSyntax\n------\nDEVICE:TYPE:MOUNTPOINT:FORMAT:LABEL:FSOPTIONS:BTRFS_DETAILS\n\n$(for i in $(cat /tmp/.parts | sed -e 's, ,#,g'); do echo "${i}\n";done)" 0 0 && PARTFINISH="DONE"
     done
     # disable swap and all mounted partitions
     _umountall
@@ -2495,23 +2504,23 @@ mountpoints() {
         BTRFS_SSD=$(echo ${line} | cut -d: -f 12)
         if [[ "${DOMKFS}" = "yes" ]]; then
             if [[ "${FSTYPE}" = "swap" ]]; then
-                DIALOG --infobox "Creating and activating swapspace on ${PART}" 0 0
+                DIALOG --infobox $"Creating and activating swapspace on ${PART}" 0 0
             else
-                DIALOG --infobox "Creating ${FSTYPE} on ${PART},\nmounting to ${DESTDIR}${MP}" 0 0
+                DIALOG --infobox $"Creating ${FSTYPE} on ${PART},\nmounting to ${DESTDIR}${MP}" 0 0
             fi
             _mkfs yes ${PART} ${FSTYPE} ${DESTDIR} ${MP} ${LABEL_NAME} ${FS_OPTIONS} ${BTRFS_DEVICES} ${BTRFS_LEVEL} ${BTRFS_SUBVOLUME} ${DOSUBVOLUME} ${BTRFS_COMPRESS} ${BTRFS_SSD} || return 1
         else
             if [[ "${FSTYPE}" = "swap" ]]; then
-                DIALOG --infobox "Activating swapspace on ${PART}" 0 0
+                DIALOG --infobox $"Activating swapspace on ${PART}" 0 0
             else
-                DIALOG --infobox "Mounting ${FSTYPE} on ${PART} to ${DESTDIR}${MP}" 0 0
+                DIALOG --infobox $"Mounting ${FSTYPE} on ${PART} to ${DESTDIR}${MP}" 0 0
             fi
             _mkfs no ${PART} ${FSTYPE} ${DESTDIR} ${MP} ${LABEL_NAME} ${FS_OPTIONS} ${BTRFS_DEVICES} ${BTRFS_LEVEL} ${BTRFS_SUBVOLUME} ${DOSUBVOLUME} ${BTRFS_COMPRESS} ${BTRFS_SSD} || return 1
         fi
         sleep 1
     done
 
-    DIALOG --msgbox "Partitions were successfully mounted." 0 0
+    DIALOG --msgbox $"Partitions were successfully mounted." 0 0
     NEXTITEM="5"
     S_MKFS=1
 }
@@ -2554,13 +2563,13 @@ _mkfs() {
         if [[ "${_domk}" = "yes" ]]; then
             mkswap -L ${_labelname} ${_device} >${LOG} 2>&1
             if [[ $? != 0 ]]; then
-                DIALOG --msgbox "Error creating swap: mkswap ${_device}" 0 0
+                DIALOG --msgbox $"Error creating swap: mkswap ${_device}" 0 0
                 return 1
             fi
         fi
         swapon ${_device} >${LOG} 2>&1
         if [[ $? != 0 ]]; then
-            DIALOG --msgbox "Error activating swap: swapon ${_device}" 0 0
+            DIALOG --msgbox $"Error activating swap: swapon ${_device}" 0 0
             return 1
         fi
     else
@@ -2570,7 +2579,7 @@ _mkfs() {
             [[ "${_fstype}" = "${fs}" ]] && knownfs=1 && break
         done
         if [[ ${knownfs} -eq 0 ]]; then
-            DIALOG --msgbox "unknown fstype ${_fstype} for ${_device}" 0 0
+            DIALOG --msgbox $"unknown fstype ${_fstype} for ${_device}" 0 0
             return 1
         fi
         # if we were tasked to create the filesystem, do so
@@ -2590,7 +2599,7 @@ _mkfs() {
                 # don't handle anything else here, we will error later
             esac
             if [[ ${ret} != 0 ]]; then
-                DIALOG --msgbox "Error creating filesystem ${_fstype} on ${_device}" 0 0
+                DIALOG --msgbox $"Error creating filesystem ${_fstype} on ${_device}" 0 0
                 return 1
             fi
             sleep 2
@@ -2615,7 +2624,7 @@ _mkfs() {
             mount -t ${_fstype} ${_device} ${_dest}${_mountpoint} >${LOG} 2>&1
         fi
         if [[ $? != 0 ]]; then
-            DIALOG --msgbox "Error mounting ${_dest}${_mountpoint}" 0 0
+            DIALOG --msgbox $"Error mounting ${_dest}${_mountpoint}" 0 0
             return 1
         fi
         # change permission of base directories to correct permission
@@ -2631,7 +2640,16 @@ _mkfs() {
     # add to .device-names for config files
     local _fsuuid="$(getfsuuid ${_device})"
     local _fslabel="$(getfslabel ${_device})"
-    echo "# DEVICE DETAILS: ${_device} UUID=${_fsuuid} LABEL=${_fslabel}" >> /tmp/.device-names
+    
+    if [[ "${GUID_DETECTED}" == "1" ]]; then
+        local _partuuid="$(getpartuuid ${_device})"
+        local _partlabel="$(getpartlabel ${_device})"
+        
+        echo "# DEVICE DETAILS: ${_device} PARTUUID=${_partuuid} PARTLABEL=${_partlabel} UUID=${_fsuuid} LABEL=${_fslabel}" >> /tmp/.device-names
+    else
+        echo "# DEVICE DETAILS: ${_device} UUID=${_fsuuid} LABEL=${_fslabel}" >> /tmp/.device-names
+    fi
+
     # add to temp fstab
     if [[ "${NAME_SCHEME_PARAMETER}" == "FSUUID" ]]; then
         if [[ -n "${_fsuuid}" ]]; then
@@ -2640,6 +2658,18 @@ _mkfs() {
     elif [[ "${NAME_SCHEME_PARAMETER}" == "FSLABEL" ]]; then
         if [[ -n "${_fslabel}" ]]; then
             _device="LABEL=${_fslabel}"
+        fi
+    else
+        if [[ "${GUID_DETECTED}" == "1" ]]; then
+           if [[ "${NAME_SCHEME_PARAMETER}" == "PARTUUID" ]]; then
+               if [[ -n "${_partuuid}" ]]; then
+                   _device="PARTUUID=${_partuuid}"
+               fi
+           elif [[ "${NAME_SCHEME_PARAMETER}" == "PARTLABEL" ]]; then
+               if [[ -n "${_partlabel}" ]]; then
+                   _device="PARTLABEL=${_partlabel}"
+               fi
+           fi 
         fi
     fi
     if [[ "${_fstype}" = "btrfs" && -n "${_btrfsmountoptions}" ]]; then
@@ -2659,7 +2689,7 @@ _mkfs() {
 source_set(){
     while ! [[ "${S_SRC}" = "1" ]]; do
         if ! [[ "${S_SRC}" = "1" ]]; then
-            DIALOG --msgbox "Error:\nYou have to select Source first." 0 0
+            DIALOG --msgbox $"Error:\nYou have to select Source first." 0 0
             select_source || break
         fi
     done
@@ -2668,22 +2698,7 @@ source_set(){
     fi
 }
 
-getsource() {
-    S_SRC=0
-    if [[ "${MODE}" = "media" ]]; then
-        get_media
-        #last fallback, if autodetection fails!
-        manual_media || return 1
-    fi
 
-    if [[ "${MODE}" = "ftp" ]]; then
-        #in order to cache packages from media check on it first!
-        get_media
-        select_mirror || return 1
-        NEXTITEM="2"
-    fi
-    S_SRC=1
-}
 
 # select_mirror()
 # Prompt user for preferred mirror and set ${SYNC_URL}
@@ -2691,15 +2706,15 @@ getsource() {
 # args: none
 # returns: nothing
 select_mirror() {
-    DIALOG --msgbox "Mirrors are shown by score." 7 35
+    DIALOG --msgbox $"Mirrors are shown by score." 7 35
     # FIXME: this regex doesn't honor commenting
     MIRRORS=$(egrep -o '((ftp)|(http))://[^/]*' "${MIRRORLIST}" | sed 's|$| _|g')
-    DIALOG --menu "Select an FTP/HTTP mirror" 14 55 7 \
+    DIALOG --menu $"Select an FTP/HTTP mirror" 14 55 7 \
         ${MIRRORS} \
         "Custom" "_" 2>${ANSWER} || return 1
     local _server=$(cat ${ANSWER})
     if [[ "${_server}" = "Custom" ]]; then
-        DIALOG --inputbox "Enter the full URL to core repo." 8 65 \
+        DIALOG --inputbox $"Enter the full URL to core repo." 8 65 \
             "ftp://ftp.archlinux.org/core/os/$(uname -m)" 2>${ANSWER} || return 1
             SYNC_URL=$(cat ${ANSWER})
     else
@@ -2722,7 +2737,8 @@ pacman_conf() {
     fi
     # Setup a pacman.conf in /tmp
 
-    if [[ $(uname -m) = 'i686' ]];then
+    if [[ "${SYNC_URL}" != "" ]];then 
+        if [[ $(uname -m) = 'i686' ]];then
     cat << EOF > /tmp/pacman.conf
 [options]
 Architecture = auto
@@ -2752,7 +2768,7 @@ Server = ${serverurl}
 
 EOF
 
-    else
+        else
             cat << EOF > /tmp/pacman.conf
 [options]
 Architecture = auto
@@ -2785,6 +2801,79 @@ Server = ${serverurl}
 
 EOF
 
+        fi
+    else
+        if [[ $(uname -m) = 'i686' ]];then
+    cat << EOF > /tmp/pacman.conf
+[options]
+Architecture = auto
+SigLevel = PackageOptional
+CacheDir = ${DESTDIR}/var/cache/pacman/pkg
+CacheDir = /packages/core-$(uname -m)/pkg
+CacheDir = /packages/core-any/pkg
+
+###### Repos from www.cinnarch.com ######
+[cinnarch-core]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/cinnarch-mirrorlist
+
+[cinnarch-repo]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/cinnarch-mirrorlist
+###### Repos from www.cinnarch.com ######
+
+[core]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/mirrorlist
+
+[community]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/mirrorlist
+
+EOF
+
+        else
+            cat << EOF > /tmp/pacman.conf
+[options]
+Architecture = auto
+SigLevel = PackageOptional
+CacheDir = ${DESTDIR}/var/cache/pacman/pkg
+CacheDir = /packages/core-$(uname -m)/pkg
+CacheDir = /packages/core-any/pkg
+
+###### Repos from www.cinnarch.com ######
+[cinnarch-core]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/cinnarch-mirrorlist
+
+[cinnarch-repo]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/cinnarch-mirrorlist
+###### Repos from www.cinnarch.com ######
+
+[core]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/mirrorlist
+
+[community]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/mirrorlist
+
+[multilib]
+SigLevel = PackageRequired
+Include = /etc/pacman.d/mirrorlist
+
+EOF
+
+        fi
     fi
 }
 
@@ -2819,11 +2908,10 @@ prepare_pacman() {
     prepare_pacman_keychain
 
     while [[ "${_state_sync}" != 'complete' ]];do
-
-        DIALOG --infobox "Refreshing package database..." 6 45
+        DIALOG --infobox $"Refreshing package database..." 6 45
         ${PACMAN} -Sy >${LOG} 2>${PACMAN_SYNC_LOG} || return 1
         if [[ $? -ne 0 ]]; then
-            DIALOG --msgbox "Pacman preparation failed! Check ${LOG} for errors." 6 60
+            DIALOG --msgbox $"Pacman preparation failed! Check ${LOG} for errors." 6 60
             return 1
         fi
         if [[ `grep error ${PACMAN_SYNC_LOG}` ]];then
@@ -2863,7 +2951,7 @@ run_pacman(){
 
         # display pacman output while it's running
         sleep 2
-        dialog --backtitle "${TITLE}" --title " Installing... Please Wait " \
+        dialog --backtitle "${TITLE}" --title $" Installing... Please Wait " \
             --no-kill --tailboxbg "/tmp/pacman.log" 18 70 2>${ANSWER}
         while [[ -f /tmp/setup-pacman-running ]]; do
             /bin/true
@@ -2901,7 +2989,7 @@ select_packages() {
         # if selection has been done before, warn about loss of input
         # and let the user exit gracefully
         if [[ ${S_SELECT} -ne 0 ]]; then
-            DIALOG --yesno "WARNING: Running this stage again will result in the loss of previous package selections.\n\nDo you wish to continue?" 10 50 || return 1
+            DIALOG --yesno $"WARNING: Running this stage again will result in the loss of previous package selections.\n\nDo you wish to continue?" 10 50 || return 1
         fi
         
         # local _catlist="base ^ ON"
@@ -2929,8 +3017,7 @@ select_packages() {
 
     #PACKAGES="${PACKAGES} $(cat /run/archiso/bootmnt/arch/pkglist.x86_64.txt)"
 
-    PACKAGES="${PACKAGES} base cinnarch-mirrorlist base-devel haveged crda ipw2100-fw ipw2200-fw zd1211-firmware wireless_tools wpa_actiond b43-fwcutter btrfs-progs ntfs-3g ntfsprogs dosfstools xorg-server xorg-server-utils sudo yaourt pacmanxg4 pkgfile ttf-dejavu ttf-bitstream-vera network-manager-applet gnome-terminal chromium file-roller evince gnome-screenshot flashplugin gnome-bluetooth nemo-fm nemo-fileroller totem gcalctool xdg-user-dirs-gtk gedit alsa-utils gstreamer0.10-plugins gnome-screensaver eog brasero gnome-system-monitor pidgin transmission-cli transmission-gtk libreoffice-installer xnoise faenza-hotot-icon hotot-gtk3-git shotwell cheese faenza-icon-theme gnome-themes-standard cinnamon-theme-minty cinnarch-wallpapers hicolor-icon-theme unzip zip unrar p7zip gnome-menus2 gnome-control-center python2 python2-gconf telepathy-logger clutter gconf gobject-introspection libcanberra libxxf86vm startup-notification zenity muffin cinnamon gnome-panel accountsservice gtk3 gnome-common librsvg dbus-glib intltool libwebkit libxklavier libxslt python2-distutils-extra libindicator3 desktop-file-utils libwebkit3 python2-gobject lightdm net-tools gnome-keyring xf86-input-synaptics"
-
+    PACKAGES="${PACKAGES} base base-devel haveged crda ipw2100-fw ipw2200-fw zd1211-firmware wireless_tools wpa_actiond b43-fwcutter btrfs-progs ntfs-3g ntfsprogs dosfstools xorg-server xorg-server-utils sudo yaourt pacmanxg4 pkgfile ttf-dejavu ttf-bitstream-vera network-manager-applet usb_modeswitch modemmanager networkmanager-openvpn gnome-terminal chromium file-roller evince gnome-screenshot flashplugin gnome-bluetooth nemo-fm nemo-fileroller gcalctool xdg-user-dirs-gtk gedit alsa-utils gstreamer0.10-plugins gnome-screensaver brasero gnome-system-monitor pidgin transmission-cli transmission-gtk libreoffice-installer xnoise faenza-hotot-icon hotot-gtk3-git shotwell faenza-icon-theme gnome-themes-standard cinnamon-theme-minty cinnarch-wallpapers hicolor-icon-theme unzip zip unrar p7zip gnome-menus2 gnome-control-center python2 python2-gconf telepathy-logger clutter gconf gobject-introspection libcanberra libxxf86vm startup-notification zenity muffin cinnamon gnome-panel accountsservice gtk3 gnome-common librsvg dbus-glib intltool libwebkit libxklavier libxslt python2-distutils-extra libindicator3 desktop-file-utils libwebkit3 python2-gobject lightdm net-tools gnome-keyring xf86-input-synaptics"
 
     if [[ -f /tmp/use_ntp ]];then
         PACKAGES="${PACKAGES} ntp"
@@ -2967,8 +3054,8 @@ select_packages() {
         PACKAGES="${PACKAGES} xf86-video-vmware"
     fi
 
-    if [[ `echo ${GRAPHIC_CARD}|grep -i 'vmware[[:space:]]'` != "" ]];then
-        PACKAGES="${PACKAGES} xf86-video-vmware"
+    if [[ `echo ${GRAPHIC_CARD}|grep -i 'via[[:space:]]'` != "" ]];then
+        PACKAGES="${PACKAGES} xf86-video-openchrome"
     fi
 
 
@@ -3040,7 +3127,7 @@ install_packages() {
     if [[ "${S_MKFS}" != "1" && "${S_MKFSAUTO}" != "1" ]]; then
         getdest
     fi
-    DIALOG --msgbox "Package installation will begin now.  You can watch the output in the progress window. Please be patient." 0 0
+    DIALOG --msgbox $"Package installation will begin now.  You can watch the output in the progress window. Please be patient." 0 0
     run_pacman
     S_INSTALL=1
     NEXTITEM="5"
@@ -3049,7 +3136,7 @@ install_packages() {
     # any automatic configuration should go here
 
 
-    DIALOG --infobox "Writing base configuration..." 6 40
+    DIALOG --infobox $"Writing base configuration..." 6 40
     auto_addons
     auto_fstab
     auto_mdadm
@@ -3096,7 +3183,7 @@ auto_mdadm()
 {
     if [[ -e ${DESTDIR}/etc/mdadm.conf ]];then
         if [[ "$(cat /proc/mdstat | grep ^md)" ]]; then
-            DIALOG --infobox "Adding raid setup to ${DESTDIR}/etc/mdadm.conf ..." 4 40
+            DIALOG --infobox $"Adding raid setup to ${DESTDIR}/etc/mdadm.conf ..." 4 40
             mdadm -Ds >> ${DESTDIR}/etc/mdadm.conf
         fi
     fi
@@ -3286,6 +3373,22 @@ getcryptsetup() {
     fi
 }
 
+getrootpartuuid() {
+    _rootpart="${PART_ROOT}"
+    _partuuid="$(getpartuuid ${PART_ROOT})"
+    if [[ -n "${_partuuid}" ]]; then
+        _rootpart="PARTUUID=${_partuuid}"
+    fi
+}
+
+getrootpartlabel() {
+    _rootpart="${PART_ROOT}"
+    _partlabel="$(getpartlabel ${PART_ROOT})"
+    if [[ -n "${_partlabel}" ]]; then
+        _rootpart="PARTLABEL=${_partlabel}"
+    fi
+}
+
 getrootfsuuid() {
     _rootpart="${PART_ROOT}"
     _fsuuid="$(getfsuuid ${PART_ROOT})"
@@ -3309,6 +3412,12 @@ common_bootloader_checks() {
     getraidarrays
     getcryptsetup
     getrootflags
+
+    if [[ "${GUID_DETECTED}" == "1" ]]; then
+        [[ "${NAME_SCHEME_PARAMETER}" == "PARTUUID" ]] && getrootpartuuid
+        [[ "${NAME_SCHEME_PARAMETER}" == "PARTLABEL" ]] && getrootpartlabel
+    fi
+    
     [[ "${NAME_SCHEME_PARAMETER}" == "FSUUID" ]] && getrootfsuuid
     [[ "${NAME_SCHEME_PARAMETER}" == "FSLABEL" ]] && getrootfslabel
 }
@@ -3327,7 +3436,7 @@ check_bootpart() {
 abort_btrfs_bootpart() {
         FSTYPE="$(${_BLKID} -p -i ${bootdev} -o value -s TYPE)"
         if [[ "${FSTYPE}" = "btrfs" ]]; then
-            DIALOG --msgbox "Error:\nYour selected bootloader cannot boot from btrfs partition with /boot on it." 0 0
+            DIALOG --msgbox $"Error:\nYour selected bootloader cannot boot from btrfs partition with /boot on it." 0 0
             return 1
         fi
 }
@@ -3336,7 +3445,7 @@ abort_btrfs_bootpart() {
 abort_nilfs_bootpart() {
         FSTYPE="$(${_BLKID} -p -i ${bootdev} -o value -s TYPE)"
         if [[ "${FSTYPE}" = "nilfs2" ]]; then
-            DIALOG --msgbox "Error:\nYour selected bootloader cannot boot from nilfs2 partition with /boot on it." 0 0
+            DIALOG --msgbox $"Error:\nYour selected bootloader cannot boot from nilfs2 partition with /boot on it." 0 0
             return 1
         fi
 }
@@ -3402,12 +3511,12 @@ EFIBEOF
             chroot "${DESTDIR}" "/bin/bash" "/efibootmgr_run.sh" &>"/tmp/efibootmgr_run.log"
             mv "${DESTDIR}/efibootmgr_run.sh" "/tmp/efibootmgr_run.sh"
         else
-            DIALOG --msgbox "${DESTDIR}/sys/firmware/efi/vars/ directory not found. Check whether you have booted in UEFI boot mode, manually load efivars kernel module and create a boot entry for ${_EFIBOOTMGR_LABEL} in the UEFI Boot Manager." 0 0
+            DIALOG --msgbox $"${DESTDIR}/sys/firmware/efi/vars/ directory not found. Check whether you have booted in UEFI boot mode, manually load efivars kernel module and create a boot entry for ${_EFIBOOTMGR_LABEL} in the UEFI Boot Manager." 0 0
         fi
         
         chroot_umount
     else
-        DIALOG --msgbox "efivars kernel module was not loaded properly. Manually load it and create a boot entry for DISC ${_EFIBOOTMGR_DISC} , PART ${_EFIBOOTMGR_PART_NUM} and LOADER \\EFI\\${_EFIBOOTMGR_LOADER_DIR}\\${_EFIBOOTMGR_LOADER_FILE} , in UEFI Boot Manager using efibootmgr." 0 0
+        DIALOG --msgbox $"efivars kernel module was not loaded properly. Manually load it and create a boot entry for DISC ${_EFIBOOTMGR_DISC} , PART ${_EFIBOOTMGR_PART_NUM} and LOADER \\EFI\\${_EFIBOOTMGR_LOADER_DIR}\\${_EFIBOOTMGR_LOADER_FILE} , in UEFI Boot Manager using efibootmgr." 0 0
     fi
     
     unset _EFIBOOTMGR_LABEL
@@ -3424,7 +3533,7 @@ do_apple_efi_hfs_bless() {
     
     ## Grub upstream bzr mactel branch => http://bzr.savannah.gnu.org/lh/grub/branches/mactel/changes
     ## Fedora's mactel-boot => https://bugzilla.redhat.com/show_bug.cgi?id=755093
-    DIALOG --msgbox "TODO: Apple Mac EFI Bootloader Setup" 0 0
+    DIALOG --msgbox $"TODO: Apple Mac EFI Bootloader Setup" 0 0
     
 }
 
@@ -3463,7 +3572,7 @@ doefistub_uefi_common() {
     [[ "$(uname -m)" == "i686" ]] && __CARCH="i386"
     
     if [[ "${__CARCH}" != "${_UEFI_ARCH}" ]]; then
-        DIALOG --msgbox "EFISTUB requires Kernel and UEFI arch to match, and requires CONFIG_EFI_STUB enabled kernel. Please install matching ARCH Kernel and try again." 0 0
+        DIALOG --msgbox $"EFISTUB requires Kernel and UEFI arch to match, and requires CONFIG_EFI_STUB enabled kernel. Please install matching ARCH Kernel and try again." 0 0
     elif [[ "${KERNELPKG}" == "linux-lts" ]]; then
         PACKAGES="efilinux-efi"
         run_pacman
@@ -3587,10 +3696,10 @@ CONFEOF
         ###################################
         
         if [[ -e "${DESTDIR}/boot/efi/EFI/arch/${_EFISTUB_KERNEL}" ]] && [[ -e "${DESTDIR}/boot/efi/EFI/arch/${_EFISTUB_INITRAMFS}.img" ]]; then
-            DIALOG --msgbox "The EFISTUB Kernel and initramfs have been copied to /boot/efi/EFI/arch/${_EFISTUB_KERNEL} and /boot/efi/EFI/arch/${_EFISTUB_INITRAMFS}.img respectively." 0 0
+            DIALOG --msgbox $"The EFISTUB Kernel and initramfs have been copied to /boot/efi/EFI/arch/${_EFISTUB_KERNEL} and /boot/efi/EFI/arch/${_EFISTUB_INITRAMFS}.img respectively." 0 0
             
             if [[ "${_EFILINUX}" == "1" ]]; then
-                DIALOG --msgbox "You will now be put into the editor to edit efilinux.cfg . After you save your changes, exit the editor." 0 0
+                DIALOG --msgbox $"You will now be put into the editor to edit efilinux.cfg . After you save your changes, exit the editor." 0 0
                 geteditor || return 1
                 "${EDITOR}" "${DESTDIR}/boot/efi/EFI/efilinux/efilinux.cfg"
             # else
@@ -3601,6 +3710,7 @@ CONFEOF
                 
                 # DIALOG --msgbox "You will now be put into the editor to edit linux.conf . After you save your changes, exit the editor." 0 0
                 # geteditor || return 1
+             
                 # "${EDITOR}" "${DESTDIR}/boot/efi/EFI/arch/linux.conf"
                 
                 # DIALOG --defaultno --yesno "Do you want to copy /boot/efi/EFI/arch/${_EFISTUB_KERNEL} to /boot/efi/EFI/boot/boot${_SPEC_UEFI_ARCH}.efi .\n\nThis might be needed in some systems where efibootmgr may not work due to firmware issues." 0 0 && _UEFISYS_EFI_BOOT_DIR="1"
@@ -3616,7 +3726,7 @@ CONFEOF
                 # fi
             fi
             
-            DIALOG --menu "Select which UEFI Boot Manager to install, to provide a menu for EFISTUB kernels?" 13 55 3 \
+            DIALOG --menu $"Select which UEFI Boot Manager to install, to provide a menu for EFISTUB kernels?" 13 55 3 \
                 "rEFInd_UEFI_${UEFI_ARCH}" "rEFInd ${UEFI_ARCH} UEFI Boot Manager" \
                 "GUMMIBOOT_UEFI_${UEFI_ARCH}" "Simple Text Mode ${UEFI_ARCH} UEFI Boot Manager" \
                 "NONE" "No Boot Manager" 2>${ANSWER} || CANCEL=1
@@ -3626,7 +3736,7 @@ CONFEOF
                 "NONE") return 0 ;;
             esac
         else
-            DIALOG --msgbox "Error setting up EFISTUB kernel and initramfs in /boot/efi." 0 0
+            DIALOG --msgbox $"Error setting up EFISTUB kernel and initramfs in /boot/efi." 0 0
         fi
     fi
     
@@ -3651,7 +3761,7 @@ do_efistub_uefi_i686() {
 
 dogummiboot_uefi_common() {
     
-    DIALOG --msgbox "Setting up gummiboot-efi now ..." 0 0
+    DIALOG --msgbox $"Setting up gummiboot-efi now ..." 0 0
     
     PACKAGES="gummiboot-efi"
     run_pacman
@@ -3704,9 +3814,9 @@ GUMEOF
         _BOOTMGR_LOADER_FILE="gummiboot${_SPEC_UEFI_ARCH}.efi"
         do_uefi_bootmgr_setup
         
-        DIALOG --msgbox "gummiboot-efi has been setup successfully." 0 0
+        DIALOG --msgbox $"gummiboot-efi has been setup successfully." 0 0
         
-        DIALOG --msgbox "You will now be put into the editor to edit loader.conf and gummiboot menu entry files . After you save your changes, exit the editor." 0 0
+        DIALOG --msgbox $"You will now be put into the editor to edit loader.conf and gummiboot menu entry files . After you save your changes, exit the editor." 0 0
         geteditor || return 1
         
         if [[ "${_EFILINUX}" == "1" ]]; then
@@ -3719,7 +3829,7 @@ GUMEOF
         
         "${EDITOR}" "${DESTDIR}/boot/efi/loader/loader.conf"
         
-        DIALOG --defaultno --yesno "Do you want to copy /boot/efi/EFI/gummiboot/gummiboot${_SPEC_UEFI_ARCH}.efi to /boot/efi/EFI/boot/boot${_SPEC_UEFI_ARCH}.efi ?\n\nThis might be needed in some systems where efibootmgr may not work due to firmware issues." 0 0 && _UEFISYS_EFI_BOOT_DIR="1"
+        DIALOG --defaultno --yesno $"Do you want to copy /boot/efi/EFI/gummiboot/gummiboot${_SPEC_UEFI_ARCH}.efi to /boot/efi/EFI/boot/boot${_SPEC_UEFI_ARCH}.efi ?\n\nThis might be needed in some systems where efibootmgr may not work due to firmware issues." 0 0 && _UEFISYS_EFI_BOOT_DIR="1"
         
         if [[ "${_UEFISYS_EFI_BOOT_DIR}" == "1" ]]; then
             mkdir -p "${DESTDIR}/boot/efi/EFI/boot"
@@ -3727,7 +3837,7 @@ GUMEOF
             cp -f "${DESTDIR}/boot/efi/EFI/gummiboot/gummiboot${_SPEC_UEFI_ARCH}.efi" "${DESTDIR}/boot/efi/EFI/boot/boot${_SPEC_UEFI_ARCH}.efi"
         fi
     else
-        DIALOG --msgbox "Error setting up gummiboot-efi." 0 0
+        DIALOG --msgbox $"Error setting up gummiboot-efi." 0 0
     fi
     
 }
@@ -3735,7 +3845,7 @@ GUMEOF
 
 dorefind_uefi_common() {
     
-    DIALOG --msgbox "Setting up refind-efi now ..." 0 0
+    DIALOG --msgbox $"Setting up refind-efi now ..." 0 0
     
     PACKAGES="refind-efi"
     run_pacman
@@ -3793,14 +3903,14 @@ REFINDEOF
         _BOOTMGR_LOADER_FILE="refind${_SPEC_UEFI_ARCH}.efi"
         do_uefi_bootmgr_setup
         
-        DIALOG --msgbox "refind-efi has been setup successfully." 0 0
+        DIALOG --msgbox $"refind-efi has been setup successfully." 0 0
         
-        DIALOG --msgbox "You will now be put into the editor to edit refind.conf (and maybe refind_linux.conf) . After you save your changes, exit the editor." 0 0
+        DIALOG --msgbox $"You will now be put into the editor to edit refind.conf (and maybe refind_linux.conf) . After you save your changes, exit the editor." 0 0
         geteditor || return 1
         "${EDITOR}" "${_REFIND_CONFIG}"
         [[ "${_EFILINUX}" != "1" ]] && "${EDITOR}" "${DESTDIR}/boot/efi/EFI/arch/refind_linux.conf"
         
-        DIALOG --defaultno --yesno "Do you want to copy /boot/efi/EFI/refind/refind${_SPEC_UEFI_ARCH}.efi to /boot/efi/EFI/boot/boot${_SPEC_UEFI_ARCH}.efi ?\n\nThis might be needed in some systems where efibootmgr may not work due to firmware issues." 0 0 && _UEFISYS_EFI_BOOT_DIR="1"
+        DIALOG --defaultno --yesno $"Do you want to copy /boot/efi/EFI/refind/refind${_SPEC_UEFI_ARCH}.efi to /boot/efi/EFI/boot/boot${_SPEC_UEFI_ARCH}.efi ?\n\nThis might be needed in some systems where efibootmgr may not work due to firmware issues." 0 0 && _UEFISYS_EFI_BOOT_DIR="1"
         
         if [[ "${_UEFISYS_EFI_BOOT_DIR}" == "1" ]]; then
             mkdir -p "${DESTDIR}/boot/efi/EFI/boot"
@@ -3814,7 +3924,7 @@ REFINDEOF
             cp -rf "${DESTDIR}/boot/efi/EFI/refind/icons" "${DESTDIR}/boot/efi/EFI/boot/icons"
         fi
     else
-        DIALOG --msgbox "Error setting up refind-efi." 0 0
+        DIALOG --msgbox $"Error setting up refind-efi." 0 0
     fi
     
 }
@@ -3836,7 +3946,7 @@ dogrub_common_before() {
     common_bootloader_checks
     
     if ! [[ "$(dmraid -r | grep ^no )" ]]; then
-        DIALOG --yesno "Setup detected dmraid device.\nDo you want to install grub on this device?" 0 0 && USE_DMRAID="1"
+        DIALOG --yesno $"Setup detected dmraid device.\nDo you want to install grub on this device?" 0 0 && USE_DMRAID="1"
     fi
 }
 
@@ -4224,11 +4334,11 @@ dogrub_bios() {
         DEVS="$(findbootloaderdisks _)"
         
         if [[ "${DEVS}" == "" ]]; then
-            DIALOG --msgbox "No hard drives were found" 0 0
+            DIALOG --msgbox $"No hard drives were found" 0 0
             return 1
         fi
         
-        DIALOG --menu "Select the boot device where the GRUB(2) bootloader will be installed." 14 55 7 ${DEVS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select the boot device where the GRUB(2) bootloader will be installed." 14 55 7 ${DEVS} 2>${ANSWER} || return 1
         bootdev=$(cat ${ANSWER})
     else
         DEVS="$(findbootloaderdisks _)"
@@ -4237,11 +4347,11 @@ dogrub_bios() {
         # DEVS="${DEVS} $(findbootloaderpartitions _)"
         
         if [[ "${DEVS}" == "" ]]; then
-            DIALOG --msgbox "No hard drives were found" 0 0
+            DIALOG --msgbox $"No hard drives were found" 0 0
             return 1
         fi
         
-        DIALOG --menu "Select the boot device where the GRUB(2) bootloader will be installed (usually the MBR  and not a partition)." 14 55 7 ${DEVS} 2>${ANSWER} || return 1
+        DIALOG --menu $"Select the boot device where the GRUB(2) bootloader will be installed (usually the MBR  and not a partition)." 14 55 7 ${DEVS} 2>${ANSWER} || return 1
         bootdev=$(cat ${ANSWER})
     fi
     
@@ -4253,16 +4363,16 @@ dogrub_bios() {
         check_gpt
     else
         if [[ "${FAIL_COMPLEX}" == "0" ]]; then
-            DIALOG --defaultno --yesno "Warning:\nSetup detected no GUID (gpt) partition table.\n\nGrub(2) has only space for approx. 30k core.img file. Depending on your setup, it might not fit into this gap and fail.\n\nDo you really want to install grub(2) to a msdos partition table?" 0 0 || return 1
+            DIALOG --defaultno --yesno $"Warning:\nSetup detected no GUID (gpt) partition table.\n\nGrub(2) has only space for approx. 30k core.img file. Depending on your setup, it might not fit into this gap and fail.\n\nDo you really want to install grub(2) to a msdos partition table?" 0 0 || return 1
         fi
     fi
     
     if [[ "${FAIL_COMPLEX}" == "1" ]]; then
-        DIALOG --msgbox "Error:\nGrub(2) cannot boot from ${bootdev}, which contains /boot!\n\nPossible error sources:\n- encrypted devices are not supported" 0 0
+        DIALOG --msgbox $"Error:\nGrub(2) cannot boot from ${bootdev}, which contains /boot!\n\nPossible error sources:\n- encrypted devices are not supported" 0 0
         return 1
     fi
     
-    DIALOG --infobox "Installing the GRUB(2) BIOS bootloader..." 0 0
+    DIALOG --infobox $"Installing the GRUB(2) BIOS bootloader..." 0 0
     # freeze and unfreeze xfs filesystems to enable grub(2) installation on xfs filesystems
     freeze_xfs
     chroot_mount
@@ -4284,11 +4394,9 @@ dogrub_bios() {
     
     chroot_umount
     
-    mkdir -p "${DESTDIR}/boot/grub/locale"
-    cp -f "${DESTDIR}/usr/share/locale/en@quot/LC_MESSAGES/grub.mo" "${DESTDIR}/boot/grub/locale/en.mo"
      
     if [[ -e "${DESTDIR}/boot/grub/i386-pc/core.img" ]]; then
-        DIALOG --msgbox "GRUB(2) BIOS has been successfully installed." 0 0
+        DIALOG --msgbox $"GRUB(2) BIOS has been successfully installed." 0 0
         
         GRUB_PREFIX_DIR="/boot/grub/"
         GRUB_BIOS="1"
@@ -4298,7 +4406,7 @@ dogrub_bios() {
 
         GRUB_BIOS=""
     else
-        DIALOG --msgbox "Error installing GRUB(2) BIOS.\nCheck /tmp/grub_bios_install.log for more info.\n\nYou probably need to install it manually by chrooting into ${DESTDIR}.\nDon't forget to bind /dev and /proc into ${DESTDIR} before chrooting." 0 0
+        DIALOG --msgbox $"Error installing GRUB(2) BIOS.\nCheck /tmp/grub_bios_install.log for more info.\n\nYou probably need to install it manually by chrooting into ${DESTDIR}.\nDon't forget to bind /dev and /proc into ${DESTDIR} before chrooting." 0 0
         return 1
     fi
     
@@ -4308,7 +4416,7 @@ dogrub_uefi_common() {
     
     dogrub_common_before
     
-    DIALOG --msgbox "Installing grub-efi-${UEFI_ARCH} now ..." 0 0
+    DIALOG --msgbox $"Installing grub-efi-${UEFI_ARCH} now ..." 0 0
     PACKAGES="grub-common grub-efi-${UEFI_ARCH}"
     
     run_pacman
@@ -4326,10 +4434,12 @@ dogrub_uefi_common() {
         --recheck \
         --debug &>"/tmp/grub_uefi_${UEFI_ARCH}_install.log"
     
+
     chroot_umount
     
     mkdir -p "${DESTDIR}/boot/grub/locale"
     cp -f "${DESTDIR}/usr/share/locale/en@quot/LC_MESSAGES/grub.mo" "${DESTDIR}/boot/grub/locale/en.mo"
+    
     
     BOOT_PART_FS_UUID="$(LD_LIBRARY_PATH="${DESTDIR}/usr/lib:${DESTDIR}/lib" "${DESTDIR}/usr/sbin/grub-probe" --target="fs_uuid" "${DESTDIR}/boot" 2>/dev/null)"
     BOOT_PART_FS="$(LD_LIBRARY_PATH="${DESTDIR}/usr/lib:${DESTDIR}/lib" "${DESTDIR}/usr/sbin/grub-probe" --target="fs" "${DESTDIR}/boot" 2>/dev/null)"
@@ -4402,14 +4512,14 @@ EOF
         _BOOTMGR_LOADER_FILE="grub${SPEC_UEFI_ARCH}.efi"
         do_uefi_bootmgr_setup
         
-        DIALOG --msgbox "GRUB(2) UEFI ${UEFI_ARCH} has been successfully installed." 0 0
+        DIALOG --msgbox $"GRUB(2) UEFI ${UEFI_ARCH} has been successfully installed." 0 0
         
         GRUB_PREFIX_DIR="/boot/grub/"
         GRUB_UEFI="1"
         dogrub_config
         GRUB_UEFI=""
         
-        DIALOG --defaultno --yesno "Do you want to copy /boot/efi/EFI/arch_grub/grub${SPEC_UEFI_ARCH}.efi to /boot/efi/EFI/boot/boot${SPEC_UEFI_ARCH}.efi ?\n\nThis might be needed in some systems where efibootmgr may not work due to firmware issues." 0 0 && _UEFISYS_EFI_BOOT_DIR="1"
+        DIALOG --defaultno --yesno $"Do you want to copy /boot/efi/EFI/arch_grub/grub${SPEC_UEFI_ARCH}.efi to /boot/efi/EFI/boot/boot${SPEC_UEFI_ARCH}.efi ?\n\nThis might be needed in some systems where efibootmgr may not work due to firmware issues." 0 0 && _UEFISYS_EFI_BOOT_DIR="1"
         
         if [[ "${_UEFISYS_EFI_BOOT_DIR}" == "1" ]]; then
             mkdir -p "${DESTDIR}/boot/efi/EFI/boot"
@@ -4419,7 +4529,7 @@ EOF
             cp -f "${DESTDIR}/boot/efi/EFI/arch_grub/grub${SPEC_UEFI_ARCH}.efi" "${DESTDIR}/boot/efi/EFI/boot/boot${SPEC_UEFI_ARCH}.efi"
         fi
     else
-        DIALOG --msgbox "Error installing GRUB UEFI ${UEFI_ARCH}.\nCheck /tmp/grub_uefi_${UEFI_ARCH}_install.log for more info.\n\nYou probably need to install it manually by chrooting into ${DESTDIR}.\nDon't forget to bind /dev, /sys and /proc into ${DESTDIR} before chrooting." 0 0
+        DIALOG --msgbox $"Error installing GRUB UEFI ${UEFI_ARCH}.\nCheck /tmp/grub_uefi_${UEFI_ARCH}_install.log for more info.\n\nYou probably need to install it manually by chrooting into ${DESTDIR}.\nDon't forget to bind /dev, /sys and /proc into ${DESTDIR} before chrooting." 0 0
         return 1
     fi
     
@@ -4446,7 +4556,7 @@ select_source() {
 
         MODE="ftp"
         DEFAULT=
-        TITLE="Cinnarch FTP/HTTP Installation"
+        TITLE=$"Cinnarch FTP/HTTP Installation"
         while true; do
             if [[ -n "${NEXTITEM}" ]]; then
             DEFAULT="--default-item ${NEXTITEM}"
@@ -4455,29 +4565,42 @@ select_source() {
             fi
             CANCEL=""
 
-            
-            if [ ! "$NETWORK_ALIVE" = "" ]; then
-                DIALOG ${DEFAULT} --menu "FTP Installation" 10 35 3 \
-                    "0" "Set up Network" \
-                    "1" "Choose Mirror" \
-                    "2" "Return to Main Menu" 2>${ANSWER} || CANCEL="1"
-            else
-                DIALOG ${DEFAULT} --menu "FTP Installation" 10 35 3 \
-                    "1" "Choose Mirror" \
-                    "2" "Return to Main Menu" 2>${ANSWER} || CANCEL="1"
-            fi
 
-            
+
+            S_SRC=1
+    
+            DIALOG ${DEFAULT} --menu $"FTP Installation" 10 55 3 \
+                        "0" $"Autodetect fastest mirror" \
+                        "1" $"Manually select your mirror" \
+                        "2" $"Return to Main Menu" 2>${ANSWER} || CANCEL="1"
+
+                    
 
             case "$(cat ${ANSWER})" in
             "0")
-                donetwork ;;
+                
+                if [[ -e '/tmp/.rankmirrors' ]];then
+                    DIALOG --title "Rankmirrors" --infobox $"Detecting the fastest server for your location..." 5 55
+                    while [[ -f '/tmp/.rankmirrors' ]]; do
+                        /bin/true
+                    done
+                fi
+                cp /tmp/.mirrorlist /etc/pacman.d/mirrorlist 2>&1
+                DIALOG --title "Rankmirrors" --msgbox $"You have now the fastest server mirror selected" 7 55
+                S_SRC=0
+                ;;
             "1")
-                getsource || return 1
+                select_mirror || return 1
+                S_SRC=0
                 ;;
              *)
                 break ;;
             esac
+
+            NEXTITEM="2"
+
+            
+
         done
     if [[ "${CANCEL}" = "1" ]]; then
         NEXTITEM="3"
@@ -4490,7 +4613,7 @@ set_clock() {
     if [[ -e /usr/bin/tz ]]; then
         tz --setup && NEXTITEM="2"
     else
-        DIALOG --msgbox "Error:\ntz script not found, aborting clock setting" 0 0
+        DIALOG --msgbox $"Error:\ntz script not found, aborting clock setting" 0 0
     fi
 }
 
@@ -4498,7 +4621,7 @@ set_language() {
     if [[ -e /usr/bin/lg ]]; then
         lg --setup && NEXTITEM="1"
     else
-        DIALOG --msgbox "Error:\nlg script not found, aborting language setting" 0 0
+        DIALOG --msgbox $"Error:\nlg script not found, aborting language setting" 0 0
     fi
 }
 
@@ -4506,7 +4629,7 @@ set_keyboard() {
     if [[ -e /usr/bin/km ]]; then
         km --setup && NEXTITEM="1"
     else
-        DIALOG --msgbox "Error:\nkm script not found, aborting keyboard and console setting" 0 0
+        DIALOG --msgbox $"Error:\nkm script not found, aborting keyboard and console setting" 0 0
     fi
 }
 
@@ -4524,7 +4647,7 @@ run_mkinitcpio() {
     rm -f /tmp/setup-mkinitcpio-running
     ) &
     sleep 2
-    dialog --backtitle "${TITLE}" --title "Rebuilding initramfs images ..." --no-kill --tailboxbg "/tmp/mkinitcpio.log" 18 70
+    dialog --backtitle "${TITLE}" --title $"Rebuilding initramfs images ..." --no-kill --tailboxbg "/tmp/mkinitcpio.log" 18 70
     while [[ -f /tmp/setup-mkinitcpio-running ]]; do
         /bin/true
     done
@@ -4543,12 +4666,13 @@ prepare_harddrive() {
             DEFAULT=""
         fi
         CANCEL=""
-        dialog ${DEFAULT} --backtitle "${TITLE}" --menu "Prepare Hard Drive" 12 60 5 \
-            "1" "Auto-Prepare (erases the ENTIRE hard drive)" \
-            "2" "Partition Hard Drives" \
-            "3" "Create Software Raid, Lvm2 and Luks encryption" \
-            "4" "Set Filesystem Mountpoints" \
-            "5" "Return to Main Menu" 2>${ANSWER} || CANCEL="1"
+        dialog ${DEFAULT} --backtitle "${TITLE}" --menu $"Prepare Hard Drive" 12 60 5 \
+            "1" $"Auto-Prepare (erases the ENTIRE hard drive)" \
+            "2" $"Partition Hard Drives (terminal)" \
+            "3" $"Partitioning - Launch GParted (Graphical tool)" \
+            "4" $"Create Software Raid, Lvm2 and Luks encryption" \
+            "5" $"Set Filesystem Mountpoints" \
+            "6" $"Return to Main Menu" 2>${ANSWER} || CANCEL="1"
         NEXTITEM="$(cat ${ANSWER})"
         [[ "${S_MKFSAUTO}" = "1" ]] && DONE=1
         case $(cat ${ANSWER}) in
@@ -4559,8 +4683,17 @@ prepare_harddrive() {
             "2")
                 partition ;;
             "3")
-                create_special ;;
+                if [[ `which gparted` ]];then
+                    /usr/sbin/gparted &>/dev/null &
+                    DIALOG --msgbox $"Click 'OK' when you're done with GParted" 7 55
+
+                else
+                    DIALOG --msgbox $"Gparted is not available in Cinnarch minimum \n\nDownload the regular Cinnarch version to use it." 9 55
+                fi
+                NEXTITEM="5" ;;
             "4")
+                create_special ;;
+            "5")
                 PARTFINISH=""
                 ASK_MOUNTPOINTS="1"
                 mountpoints ;;
@@ -4586,11 +4719,11 @@ create_special() {
             DEFAULT=""
         fi
         CANCEL=""
-        dialog ${DEFAULT} --backtitle "${TITLE}" --menu "Create Software Raid, LVM2 and Luks encryption" 14 60 5 \
-            "1" "Create Software Raid" \
-            "2" "Create LVM2" \
-            "3" "Create Luks encryption" \
-            "4" "Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
+        dialog ${DEFAULT} --backtitle "${TITLE}" --menu $"Create Software Raid, LVM2 and Luks encryption" 14 60 5 \
+            "1" $"Create Software Raid" \
+            "2" $"Create LVM2" \
+            "3" $"Create Luks encryption" \
+            "4" $"Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
         NEXTITEM="$(cat ${ANSWER})"
         case $(cat ${ANSWER}) in
             "1")
@@ -4604,9 +4737,9 @@ create_special() {
         esac
     done
     if [[ "${CANCEL}" = "1" ]]; then
-        NEXTITEM="3"
-    else
         NEXTITEM="4"
+    else
+        NEXTITEM="5"
     fi
 }
 
@@ -4621,12 +4754,12 @@ _createmd() {
             DEFAULT=""
         fi
         CANCEL=""
-        dialog ${DEFAULT} --backtitle "${TITLE}" --menu "Create Software Raid" 12 60 5 \
-            "1" "Raid Help" \
-            "2" "Reset Software Raid completely" \
-            "3" "Create Software Raid" \
-            "4" "Create Partitionable Software Raid" \
-            "5" "Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
+        dialog ${DEFAULT} --backtitle "${TITLE}" --menu $"Create Software Raid" 12 60 5 \
+            "1" $"Raid Help" \
+            "2" $"Reset Software Raid completely" \
+            "3" $"Create Software Raid" \
+            "4" $"Create Partitionable Software Raid" \
+            "5" $"Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
         NEXTITEM="$(cat ${ANSWER})"
         case $(cat ${ANSWER}) in
             "1")
@@ -4661,13 +4794,13 @@ _createlvm() {
             DEFAULT=""
         fi
         CANCEL=""
-        dialog ${DEFAULT} --backtitle "${TITLE}" --menu "Create physical volume, volume group or logical volume" 13 60 7 \
-            "1" "LVM Help" \
-            "2" "Reset Logical Volume completely" \
-            "3" "Create Physical Volume" \
-            "4" "Create Volume Group" \
-            "5" "Create Logical Volume" \
-            "6" "Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
+        dialog ${DEFAULT} --backtitle "${TITLE}" --menu $"Create physical volume, volume group or logical volume" 13 60 7 \
+            "1" $"LVM Help" \
+            "2" $"Reset Logical Volume completely" \
+            "3" $"Create Physical Volume" \
+            "4" $"Create Volume Group" \
+            "5" $"Create Logical Volume" \
+            "6" $"Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
         NEXTITEM="$(cat ${ANSWER})"
         case $(cat ${ANSWER}) in
             "1")
@@ -4702,11 +4835,11 @@ _createluks() {
             DEFAULT=""
         fi
         CANCEL=""
-        dialog ${DEFAULT} --backtitle "${TITLE}" --menu "Create Luks Encryption" 12 60 5 \
-            "1" "Luks Help" \
-            "2" "Reset Luks Encryption completely" \
-            "3" "Create Luks" \
-            "4" "Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
+        dialog ${DEFAULT} --backtitle "${TITLE}" --menu $"Create Luks Encryption" 12 60 5 \
+            "1" $"Luks Help" \
+            "2" $"Reset Luks Encryption completely" \
+            "3" $"Create Luks" \
+            "4" $"Return to Previous Menu" 2>${ANSWER} || CANCEL="1"
         NEXTITEM="$(cat ${ANSWER})"
         case $(cat ${ANSWER}) in
             "1")
@@ -4734,12 +4867,8 @@ auto_hwdetect() {
     HWDETECTHOOKS=""
     HWDETECTFILES=""
     HWKVER==
-    DIALOG --yesno "PRECONFIGURATION?\n-----------------\n\nDo you want to use 'hwdetect' for:\n'/etc/mkinitcpio.conf'?\n\nThis ensures consistent ordering of your hard disk / usb controllers, network and sound devices.\n\nIt is recommended to say 'YES' here." 18 70 && HWDETECT="yes"
+    DIALOG --yesno $"PRECONFIGURATION?\n-----------------\n\nDo you want to use 'hwdetect' for:\n'/etc/mkinitcpio.conf'?\n\nThis ensures consistent ordering of your hard disk / usb controllers, network and sound devices.\n\nIt is recommended to say 'YES' here." 18 70 && HWDETECT="yes"
     if [[ "${HWDETECT}" = "yes" ]]; then
-        # check on ide-legacy boot parameter
-        [[ "$(grep -w ide-legacy /proc/cmdline)" ]] && HWPARAMETER="${HWPARAMETER} --ide-legacy"
-        # check on used keymap
-        ! [[ "$(grep '^KEYMAP="us"' ${DESTDIR}/etc/vconsole.conf)" ]] && HWPARAMETER="${HWPARAMETER} --keymap"
         # check on usb input
         [[ "$(lsmod | grep ^hid)" ]] && HWPARAMETER="${HWPARAMETER} --usbinput"
         # check on framebuffer modules and kms
@@ -4751,17 +4880,12 @@ auto_hwdetect() {
         # [[ "$(grep "i915" /etc/modprobe.d/modprobe.conf)" ]] && (FBPARAMETER="--intel-kms";HWDETECTFILES="/etc/modprobe.d/modprobe.conf")
         # [[ "$(grep "nouveau" /etc/modprobe.d/modprobe.conf)" ]] && (FBPARAMETER="--nvidia-kms";HWDETECTFILES="/etc/modprobe.d/modprobe.conf")
         # [[ "$(grep -w fbmodule /proc/cmdline)" ]] && FBPARAMETER="--fbmodule"
-        if [[ "$(lsmod | grep ^usb_storage)" ]]; then
-            DIALOG --defaultno --yesno "Setup detected usb storage driver...\nDo you need support for booting from usb devices?" 0 0 && HWPARAMETER="${HWPARAMETER} --usb"
-        fi
-        if [[ "$(lsmod | grep ^sbp2)" ]]; then
-            DIALOG --defaultno --yesno "Setup detected firewire storage driver...\nDo you need support for booting from firewire devices?" 0 0 && HWPARAMETER="${HWPARAMETER} --fw"
-        fi
+        
         if [[ "$(lsmod | grep ^pcmcia)" ]]; then
-            DIALOG --defaultno --yesno "Setup detected pcmcia hardware...\nDo you need support for booting from pcmcia devices?" 0 0 && HWPARAMETER="${HWPARAMETER} --pcmcia"
+            DIALOG --defaultno --yesno $"Setup detected pcmcia hardware...\nDo you need support for booting from pcmcia devices?" 0 0 && HWPARAMETER="${HWPARAMETER} --pcmcia"
         fi
         if [[ "$(lsmod | grep ^nfs)" ]]; then
-            DIALOG --defaultno --yesno "Setup detected nfs driver...\nDo you need support for booting from nfs shares?" 0 0 && HWPARAMETER="${HWPARAMETER} --nfs"
+            DIALOG --defaultno --yesno $"Setup detected nfs driver...\nDo you need support for booting from nfs shares?" 0 0 && HWPARAMETER="${HWPARAMETER} --nfs"
         fi
         if [[ -e ${DESTDIR}/lib/initcpio/hooks/dmraid ]]; then
             if ! [[ "$(dmraid -r | grep ^no )" ]]; then
@@ -4804,8 +4928,8 @@ auto_hwdetect() {
 auto_fb() {
     UVESAFB=""
     # clean modprobe.conf file from options first
-    sed -i -e '/options/d' ${DESTDIR}/etc/modprobe.d/modprobe.conf
-    grep ^[a-z] /etc/modprobe.d/modprobe.conf >> ${DESTDIR}/etc/modprobe.d/modprobe.conf
+    # sed -i -e '/options/d' ${DESTDIR}/etc/modprobe.d/modprobe.conf
+    # grep ^[a-z] /etc/modprobe.d/modprobe.conf >> ${DESTDIR}/etc/modprobe.d/modprobe.conf
     if [[ -e ${DESTDIR}/lib/initcpio/hooks/v86d && "$(grep -w uvesafb /proc/cmdline)" ]]; then
         UVESAFB="$(grep ^[a-z] /etc/modprobe.d/uvesafb.conf)" 
         sed -i -e "s#options.*#${UVESAFB}#g" ${DESTDIR}/etc/modprobe.d/uvesafb.conf
@@ -4833,19 +4957,12 @@ auto_parameters() {
             # fi
         fi
     else
-        if [[ ! -f ${DESTDIR}/etc/vconsole.conf ]]; then
-            : >${DESTDIR}/etc/vconsole.conf
-            if [[ -s /tmp/.keymap ]]; then
-                DIALOG --infobox "Setting the keymap: $(cat /tmp/.keymap | sed -e 's/\..*//g') in vconsole.conf ..." 0 0
-                echo KEYMAP=$(cat /tmp/.keymap | sed -e 's/\..*//g') >> ${DESTDIR}/etc/vconsole.conf
-                CINNARCHVAR="$(kernel_cmdline cinnarchvar lang:en_US,keymap:en_US)"
-                KEYMAP="$(echo "$CINNARCHVAR" | cut -d, -f2 | cut -d: -f2)"
-                _do_locales
-            fi
-        fi
+       
+        _do_locales
+
 
         if [[ -s  /tmp/.timezone ]]; then
-            DIALOG --infobox "Setting the timezone: $(cat /tmp/.timezone | sed -e 's/\..*//g') ..." 0 0
+            DIALOG --infobox $"Setting the timezone: $(cat /tmp/.timezone | sed -e 's/\..*//g') ..." 0 0
             chroot ${DESTDIR} ln -s /usr/share/zoneinfo/$(cat /tmp/.timezone | sed -e 's/\..*//g') /etc/localtime
             
         fi
@@ -4886,6 +5003,8 @@ auto_ftpmirror() {
         SYNC_URL="${SYNC_URL}"
         awk "BEGIN { printf(\"# Mirror used during installation\nServer = "${SYNC_URL}"\n\n\") } 1 " "${DESTDIR}/etc/pacman.d/mirrorlist" > /tmp/inst-mirrorlist
         mv /tmp/inst-mirrorlist "${DESTDIR}/etc/pacman.d/mirrorlist"
+    else
+        mv /tmp/.mirrorlist "${DESTDIR}/etc/pacman.d/mirrorlist"
     fi
 }
 
@@ -4952,12 +5071,12 @@ configure_system() {
             DEFAULT=""
         fi
         
-        DIALOG ${DEFAULT} --menu "Configuration" 20 80 15 \
-                "Desktop-User"                  "Create your user" \
-                "Hostname"                      "Your computer's name" \
-                "Root-Password"                 "Set the root password" \
-                "/etc/mkinitcpio.conf"          "(Optional) Initramfs Config" \
-                "Return"                        "Return to Main Menu" 2>${ANSWER} || break
+        DIALOG ${DEFAULT} --menu $"Configuration" 20 80 15 \
+                "Desktop-User"                  $"Create your user" \
+                "Hostname"                      $"Your computer's name" \
+                "Root-Password"                 $"Set the root password" \
+                "/etc/mkinitcpio.conf"          $"(Optional) Initramfs Config" \
+                "Return"                        $"Return to Main Menu" 2>${ANSWER} || break
     
         
         FILE="$(cat ${ANSWER})"
@@ -4974,7 +5093,7 @@ configure_system() {
             if [[ "${CONTROL_USER}" = 0 ]]; then
 
                 while [[ "${USER_NAME_TMP}" = "" ]]; do
-                    DIALOG --inputbox "Enter your user name (no spaces):" 9 40 2>${ANSWER} || return 1
+                    DIALOG --inputbox $"Enter your user name (no spaces):" 9 40 2>${ANSWER} || return 1
                     USER_NAME_TMP=$(cat ${ANSWER})
                     USER_NAME=${USER_NAME_TMP,,}
                     rm -f ${DESTDIR}/etc/sudoers
@@ -4984,15 +5103,15 @@ configure_system() {
                     #sed -i "s|^cinnarch|${USER_NAME}|g" ${DESTDIR}/etc/sudoers
                     chmod 440 ${DESTDIR}/etc/sudoers
 
-                    DIALOG --inputbox "Enter your full name:" 9 40 2>${ANSWER} || return 1
+                    DIALOG --inputbox $"Enter your full name:" 9 40 2>${ANSWER} || return 1
                     USER_FULL_NAME=$(cat ${ANSWER})
                     
                 done
 
                 while [[ "${USER_PASSWORD}" = "" ]]; do
-                        DIALOG --insecure --passwordbox "Enter your user password:" 0 0 2>${ANSWER} || return 1
+                        DIALOG --insecure --passwordbox $"Enter your user password:" 0 0 2>${ANSWER} || return 1
                         PASS=$(cat ${ANSWER})
-                        DIALOG --insecure --passwordbox "Retype your user password:" 0 0 2>${ANSWER} || return 1
+                        DIALOG --insecure --passwordbox $"Retype your user password:" 0 0 2>${ANSWER} || return 1
                         PASS2=$(cat ${ANSWER})
                         if [[ "${PASS}" = "${PASS2}" ]]; then
                             USER_PASSWORD=${PASS}
@@ -5000,11 +5119,11 @@ configure_system() {
                             echo ${USER_PASSWORD} >> /tmp/.user_password
                             USER_PASSWORD=/tmp/.user_password
                         else
-                         DIALOG --msgbox "Password didn't match, please enter again." 0 0
+                         DIALOG --msgbox $"Password didn't match, please enter again." 0 0
                         fi
                 done
 
-                DIALOG --infobox "Creating user..." 4 30
+                DIALOG --infobox $"Creating user..." 4 30
 
                 cp -rf /etc/skel ${DESTDIR}/etc/  >/dev/null 2>&1
                 rm -rf ${DESTDIR}/etc/skel/Desktop >/dev/null 2>&1
@@ -5021,7 +5140,7 @@ configure_system() {
 
                 CONTROL_USER=1
             else
-                DIALOG --msgbox "User has already been created" 6 35
+                DIALOG --msgbox $"User has already been created" 6 35
             fi
 
         elif [[ "${FILE}" = "Hostname" ]]; then
@@ -5030,7 +5149,7 @@ configure_system() {
             if [[ "${CONTROL_HOSTNAME}" = 0 ]];then
 
                 while [[ "${HOSTNAME}" = "" ]]; do
-                    DIALOG --inputbox "Enter your computer's name:" 0 0 2>${ANSWER} || return 1
+                    DIALOG --inputbox $"Enter your computer's name:" 0 0 2>${ANSWER} || return 1
                     HOSTNAME=$(cat ${ANSWER})
                     if [[ ! -f ${DESTDIR}/etc/hostname ]]; then
                         echo ${HOSTNAME} > ${DESTDIR}/etc/hostname
@@ -5038,26 +5157,29 @@ configure_system() {
                 done 
                 CONTROL_HOSTNAME=1
             else       
-                DIALOG --msgbox "Hostname has already been set up" 6 40
+                DIALOG --msgbox $"Hostname has already been set up" 6 40
             fi
-            
+
+
         elif [[ "${FILE}" = "/etc/mkinitcpio.conf" ]]; then    # non-file
-            DIALOG --msgbox "The mkinitcpio.conf file controls which modules will be placed into the initramfs for your system's kernel.\n\n- Non US keymap users should add 'keymap' to HOOKS= array\n- USB keyboard users should add 'usbinput' to HOOKS= array\n- If you install under VMWARE add 'BusLogic' to MODULES= array\n- raid, lvm2, encrypt are not enabled by default\n- 2 or more disk controllers, please specify the correct module\n  loading order in MODULES= array \n\nMost of you will not need to change anything in this file." 18 70
+            
+            DIALOG --msgbox $"The mkinitcpio.conf file controls which modules will be placed into the initramfs for your system's kernel.\n\n- Non US keymap users should add 'keymap' to HOOKS= array\n- USB keyboard users should add 'usbinput' to HOOKS= array\n- If you install under VMWARE add 'BusLogic' to MODULES= array\n- raid, lvm2, encrypt are not enabled by default\n- 2 or more disk controllers, please specify the correct module\n  loading order in MODULES= array \n\nMost of you will not need to change anything in this file." 18 70
             HOOK_ERROR=""
             ${EDITOR} ${DESTDIR}${FILE}
             for i in $(cat ${DESTDIR}/etc/mkinitcpio.conf | grep ^HOOKS | sed -e 's/"//g' -e 's/HOOKS=//g'); do
                 [[ -e ${DESTDIR}/usr/lib/initcpio/install/${i} ]] || HOOK_ERROR=1
             done
             if [[ "${HOOK_ERROR}" = "1" ]]; then
-                DIALOG --msgbox "ERROR: Detected error in 'HOOKS=' line, please correct HOOKS= in /etc/mkinitcpio.conf!" 18 70
+                DIALOG --msgbox $"ERROR: Detected error in 'HOOKS=' line, please correct HOOKS= in /etc/mkinitcpio.conf!" 18 70
             fi
+
 
         elif [[ "${FILE}" = "Root-Password" ]]; then            # non-file
             PASSWORD=""
             while [[ "${PASSWORD}" = "" ]]; do
-                DIALOG --insecure --passwordbox "Enter root password:" 0 0 2>${ANSWER} || return 1
+                DIALOG --insecure --passwordbox $"Enter root password:" 0 0 2>${ANSWER} || return 1
                 PASS=$(cat ${ANSWER})
-                DIALOG --insecure --passwordbox "Retype root password:" 0 0 2>${ANSWER} || return 1
+                DIALOG --insecure --passwordbox $"Retype root password:" 0 0 2>${ANSWER} || return 1
                 PASS2=$(cat ${ANSWER})
                 if [[ "${PASS}" = "${PASS2}" ]]; then
                     PASSWORD=${PASS}
@@ -5065,7 +5187,7 @@ configure_system() {
                     echo ${PASSWORD} >> /tmp/.password
                     PASSWORD=/tmp/.password
                 else
-                    DIALOG --msgbox "Password didn't match, please enter again." 0 0
+                    DIALOG --msgbox $"Password didn't match, please enter again." 0 0
                 fi
             done
             chroot ${DESTDIR} passwd root < /tmp/.password
@@ -5092,21 +5214,36 @@ configure_system() {
         ## POSTPROCESSING ##
         # adjust time
         auto_timesetting
+
         # /etc/initcpio.conf
+        # Fix deprecated hooks
+        sed -i 's/ pata//' ${DESTDIR}/etc/mkinitcpio.conf
+        sed -i 's/ scsi//' ${DESTDIR}/etc/mkinitcpio.conf
+        sed -i 's/ sata//' ${DESTDIR}/etc/mkinitcpio.conf
+        sed -i 's/ filesystem/ block filesystem/' ${DESTDIR}/etc/mkinitcpio.conf
         run_mkinitcpio
-
-        DIALOG --infobox "Generating locales... \nThis may take a while." 0 0
+        
         # /etc/locale.gen
-        
-
-        echo LANG=$(cat /tmp/.locale) >> ${DESTDIR}/etc/locale.conf
-        echo "LC_COLLATE=C" >> ${DESTDIR}/etc/locale.conf
-
+        DIALOG --infobox $"Generating locales..." 4 25
+        cp -f /tmp/locale.conf ${DESTDIR}/etc/locale.conf
         chroot ${DESTDIR} locale-gen >/dev/null 2>&1
-        
+
+
+        # Set gsettings
+        cp /arch/set-gsettings ${DESTDIR}/usr/bin/set-gsettings
+        mkdir -p ${DESTDIR}/var/run/dbus
+        mount -o bind /var/run/dbus ${DESTDIR}/var/run/dbus
+        chroot ${DESTDIR} su -c "/usr/bin/set-gsettings" ${USER_NAME} >/dev/null 2>&1
+        rm ${DESTDIR}/usr/bin/set-gsettings
 
         # Fix transmission leftover
         mv ${DESTDIR}/usr/lib/tmpfiles.d/transmission.conf ${DESTDIR}/usr/lib/tmpfiles.d/transmission.conf.backup
+
+        # Configure touchpad
+        cp /etc/X11/xorg.conf.d/10-synaptics.conf ${DESTDIR}/etc/X11/xorg.conf.d/10-synaptics.conf
+
+        # Fix grub locale error
+        chroot ${DESTDIR} cp "/boot/grub/locale/en@quot.mo" "/boot/grub/locale/$(echo ${LOCALE}|cut -b 1-2).mo.gz"
 
 
         ## END POSTPROCESSING ##
@@ -5115,9 +5252,9 @@ configure_system() {
 
 install_bootloader_uefi_x86_64() {
     
-    DIALOG --menu "Which x86_64 UEFI bootloader would you like to use?" 13 55 2 \
-        "EFISTUB_x86_64" "Only x86_64 Kernels" \
-        "GRUB_UEFI_x86_64" "GRUB(2) x86_64 UEFI" 2>${ANSWER} || CANCEL=1
+    DIALOG --menu $"Which x86_64 UEFI bootloader would you like to use?" 13 55 2 \
+        "EFISTUB_x86_64" $"Only x86_64 Kernels" \
+        "GRUB_UEFI_x86_64" $"GRUB(2) x86_64 UEFI" 2>${ANSWER} || CANCEL=1
     case $(cat ${ANSWER}) in
         "EFISTUB_x86_64") do_efistub_uefi_x86_64 ;;
         "GRUB_UEFI_x86_64") dogrub_uefi_x86_64 ;;
@@ -5127,9 +5264,9 @@ install_bootloader_uefi_x86_64() {
 
 install_bootloader_uefi_i386() {
     
-    DIALOG --menu "Which i386 UEFI bootloader would you like to use?" 13 55 2 \
-        "EFISTUB_i686" "Only i686 Kernels" \
-        "GRUB_UEFI_i386" "GRUB(2) i386 UEFI" 2>${ANSWER} || CANCEL=1
+    DIALOG --menu $"Which i386 UEFI bootloader would you like to use?" 13 55 2 \
+        "EFISTUB_i686" $"Only i686 Kernels" \
+        "GRUB_UEFI_i386" $"GRUB(2) i386 UEFI" 2>${ANSWER} || CANCEL=1
     case $(cat ${ANSWER}) in
         "EFISTUB_i686") do_efistub_uefi_i686 ;;
         "GRUB_UEFI_i386") dogrub_uefi_i386 ;;
@@ -5153,10 +5290,10 @@ install_bootloader() {
     
     [[ "$(grep UEFI_ARCH_x86_64 /proc/cmdline)" ]] && _UEFI_x86_64="1"
     
-    [[ "${_UEFI_x86_64}" == "1" ]] && DIALOG --yesno "Setup has detected that you are using x86_64 (64-bit) UEFI ...\nDo you like to install a x86_64 UEFI bootloader?" 0 0 && install_bootloader_uefi_x86_64 && _DIRECT="1"
+    [[ "${_UEFI_x86_64}" == "1" ]] && DIALOG --yesno $"Setup has detected that you are using x86_64 (64-bit) UEFI ...\nDo you like to install a x86_64 UEFI bootloader?" 0 0 && install_bootloader_uefi_x86_64 && _DIRECT="1"
     
     if [[ "${_DIRECT}" == "1" ]]; then
-        DIALOG --yesno "Do you want to install another bootloader?" 0 0 && install_bootloader_menu && _DIRECT="0"
+        DIALOG --yesno $"Do you want to install another bootloader?" 0 0 && install_bootloader_menu && _DIRECT="0"
     else
         install_bootloader_menu
     fi
@@ -5164,10 +5301,10 @@ install_bootloader() {
 
 install_bootloader_menu() {
     
-    DIALOG --menu "What is your boot system type?" 10 40 3 \
-        "GRUB2" "BIOS (Common)" \
-        "UEFI_x86_64" "x86_64 UEFI" \
-        "UEFI_i386" "i386 UEFI" 2>${ANSWER} || CANCEL=1
+    DIALOG --menu $"What is your boot system type?" 10 40 3 \
+        "GRUB2" $"BIOS (Common)" \
+        "UEFI_x86_64" $"x86_64 UEFI" \
+        "UEFI_i386" $"i386 UEFI" 2>${ANSWER} || CANCEL=1
     case $(cat ${ANSWER}) in
         "GRUB2") dogrub_bios ;;
         "UEFI_x86_64") install_bootloader_uefi_x86_64 ;;
@@ -5175,9 +5312,9 @@ install_bootloader_menu() {
     esac
     
     if [[ "${CANCEL}" = "1" ]]; then
-        NEXTITEM="8"
+        NEXTITEM="5"
     else
-        NEXTITEM="9"
+        NEXTITEM="5"
     fi
 }
 
@@ -5187,23 +5324,22 @@ mainmenu() {
     else
         DEFAULT=""
     fi
-    dialog ${DEFAULT} --backtitle "${TITLE}" --title " MAIN MENU " \
-    --menu "Use the UP and DOWN arrows to navigate menus.\nUse TAB to switch between buttons and ENTER to select." 17 58 13 \
-    "0" "Set Language and Keyboard" \
-    "1" "Set Time And Date" \
-    "2" "Prepare Hard Drive" \
-    "3" "Select Source" \
-    "4" "Install System" \
-    "5" "Configure System" \
-    "6" "Exit Install" 2>${ANSWER}
+    dialog ${DEFAULT} --backtitle "${TITLE}" --title $" MAIN MENU " \
+    --menu $"Use the UP and DOWN arrows to navigate menus.\nUse TAB to switch between buttons and ENTER to select." 17 58 13 \
+    "0" $"Set Language" \
+    "1" $"Set Time And Date" \
+    "2" $"Prepare Hard Drive" \
+    "3" $"Select Source" \
+    "4" $"Install System" \
+    "5" $"Configure System" \
+    "6" $"Exit Install" 2>${ANSWER}
     NEXTITEM="$(cat ${ANSWER})"
 
     #"4" "Select Packages" \
     #"5" "Install Packages" \
     case $(cat ${ANSWER}) in
         "0")
-            set_language
-            set_keyboard ;;
+            set_language ;;
         "1")
             set_clock ;;
         "2")
@@ -5212,11 +5348,12 @@ mainmenu() {
             select_source ;;
 
         "4")
-            select_packages ;;
+            select_packages
+            install_bootloader ;;
         "5")
             configure_system
-            install_bootloader 
-            DIALOG --yesno "The installation is complete. \nDo you want to restart to your new system?" 0 0 && RESTART_CHECK='S'
+             
+            DIALOG --yesno $"The installation is complete. \nDo you want to restart to your new system?" 0 0 && RESTART_CHECK='S'
             if [[ "${RESTART_CHECK}" == 'S' ]];then
                 reboot
             fi
@@ -5235,7 +5372,7 @@ mainmenu() {
             echo ""
             exit 0 ;;
         *)
-            DIALOG --yesno "Abort Installation?" 6 40 && [[ -e /tmp/.setup-running ]] && rm /tmp/.setup-running && clear && exit 0
+            DIALOG --yesno $"Abort Installation?" 6 40 && [[ -e /tmp/.setup-running ]] && rm /tmp/.setup-running && clear && exit 0
             
             ;;
 
@@ -5246,14 +5383,14 @@ mainmenu() {
 #####################
 ## begin execution ##
 if [[ -e /tmp/.setup-running ]]; then
-    DIALOG --yesno "Wait! \n\nCinnarch Installer is already running somewhere else! \n\nDo you want to start from the beginning?" 0 0 && rm /tmp/.setup-running /tmp/.km-running /tmp/setup-pacman-running /tmp/setup-mkinitcpio-running /tmp/.tz-running /tmp/.setup
+    DIALOG --yesno $"Wait! \n\nCinnarch Installer is already running somewhere else! \n\nDo you want to start from the beginning?" 0 0 && rm /tmp/.setup-running /tmp/.km-running /tmp/setup-pacman-running /tmp/setup-mkinitcpio-running /tmp/.tz-running /tmp/.setup
     if [[ -e /tmp/.setup-running ]]; then
         exit 1
     fi
 fi
 
 while [[ "$NETWORK_ALIVE" != "" ]];do
-    DIALOG --msgbox "You have to configure your Internet connection before proceed. \n\nThen press 'OK'" 8 50
+    DIALOG --msgbox $"You have to configure your Internet connection before proceed. \n\nThen press 'OK'" 8 50
     NETWORK_ALIVE=`ping -c1 google.com 2>&1 | grep unknown`
 done
 
@@ -5265,17 +5402,17 @@ if [[ "$NETWORK_ALIVE" = "" ]];then
 
 
 
-    DIALOG --infobox "Checking for Cinnarch Installer Updates..." 6 50
+    DIALOG --infobox $"Checking for Cinnarch Installer Updates..." 6 50
     INSTALLER_VERSION_NET=`curl http://www.cinnarch.com/cinnarch_installer/version 2>/dev/null`
 
     if [[ ${INSTALLER_VERSION} < ${INSTALLER_VERSION_NET} ]];then
             if [[ ${INSTALLER_VERSION} < 0.5 ]];then
-                DIALOG --msgbox "Your version is too old. \n\nPlease, download the last Cinnarch Live" 7 50
+                DIALOG --msgbox $"Your version is too old. \n\nPlease, download the last Cinnarch Live" 7 50
             else
 
                 ${DLPROG} -O /arch/setup http://www.cinnarch.com/cinnarch_installer/setup 2>/dev/null
             
-                DIALOG --msgbox "Successfully updated. \n\nPlease, restart Cinnarch Installer" 7 50
+                DIALOG --msgbox $"Successfully updated. \n\nPlease, restart Cinnarch Installer" 7 50
 
             fi
 
@@ -5285,7 +5422,8 @@ if [[ "$NETWORK_ALIVE" = "" ]];then
 
 
 
-    DIALOG --msgbox "Welcome to the Cinnarch Installation program.\n\nThe install process is fairly straightforward, and you should run through the options in the order they are presented.\n\nIf you are unfamiliar with partitioning/making filesystems, you may want to consult some documentation before continuing.\n\nYou have Gparted as a visual app for the partition task available with Cinnarch" 14 65
+    DIALOG --msgbox $"Welcome to the Cinnarch Installation program.\n\nThe install process is fairly straightforward, and you should run through the options in the order they are presented.\n\nIf you are unfamiliar with partitioning/making filesystems, you may want to consult some documentation before continuing.\n\nYou have Gparted as a visual app for the partition task available with Cinnarch" 18 65
+    sh /arch/rankmirrors-script &
 
     while true; do
         mainmenu

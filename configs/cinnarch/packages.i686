@@ -54,6 +54,7 @@ virtualbox-guest-utils
 virtualbox-guest-modules
 xf86-video-vmware
 xf86-video-openchrome
+xf86-video-vesa
 
 
 # System Tools
@@ -61,7 +62,6 @@ xf86-video-openchrome
 sudo
 yaourt
 pacmanxg4
-libreoffice-installer
 pkgfile
 alsa-utils
 xdg-user-dirs-gtk
@@ -80,11 +80,8 @@ chromium
 file-roller
 evince
 gnome-bluetooth
-totem
 gcalctool
 gedit
-eog
-brasero
 gnome-system-monitor
 pidgin
 transmission-cli
@@ -92,11 +89,10 @@ transmission-gtk
 xnoise
 hotot-gtk3-git
 shotwell
-cheese
-#flashplugin
 gnome-screenshot
 gnome-font-viewer
 nemo-fm
+libreoffice-installer
 
 # Theme
 
